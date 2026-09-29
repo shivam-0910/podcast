@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>News Results - AI News Podcast</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="back-link" href="{{ url_for('index') }}">&larr; AI NEWSCAST</a>
+    <form class="search-form compact" action="{{ url_for('news.news_page') }}" method="get" autocomplete="off">
+      <input id="topic-input" name="q" type="text" placeholder="Search another topic" maxlength="200" required>
+      <button type="submit">Search</button>
+    </form>
+  </header>
+
+  <main class="container wide">
+    <h2 id="results-title">News</h2>
+    <div id="status" class="status" role="status"></div>
+    <div id="results" class="cards"></div>
+
+  </main>
+
+  <div class="action-bar">
+    <div class="selection-info">
+      <span id="selected-count" class="selected-count">0 selected</span>
+      <button id="clear-btn" type="button" class="link-btn" hidden>Clear</button>
+      <span id="selection-note" class="selection-note" role="status"></span>
+    </div>
+    <button id="create-btn" type="button" class="primary-btn" disabled>CREATE AI PODCAST</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/news.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conversation - AI News Podcast</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="back-link" href="{{ url_for('index') }}">&larr; AI NEWSCAST</a>
+    <a id="back-to-news" class="text-link" href="{{ url_for('news.news_page') }}" hidden>Back to news</a>
+  </header>
+
+  <main class="container conversation">
+    <h1 id="episode-title" class="episode-heading">Loading episode&hellip;</h1>
+    <p id="episode-meta" class="episode-meta"></p>
+    <div id="status" class="status" role="status"></div>
+    <div id="transcript" class="transcript" aria-live="polite"></div>
+    <p id="episode-note" class="episode-note" hidden>Transcript only for now. Voices, playback and the waveform are added in later steps.</p>
+  </main>
+
+  <script id="languages-data" type="application/json">{{ languages|tojson }}</script>
+  <script src="{{ url_for('static', filename='js/player.js') }}"></script>
+</body>
+</html>

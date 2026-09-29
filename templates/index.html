@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI News Podcast</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <h1>AI NEWSCAST</h1>
+    <p class="subtitle">Turn today's news into a two-host podcast.</p>
+
+    <form id="search-form" class="search-form" autocomplete="off">
+      <input id="topic-input" type="text" placeholder="Enter a topic, e.g. Artificial Intelligence" maxlength="200" required>
+      <button type="submit">Search News</button>
+    </form>
+
+    <p id="status" class="status" role="status"></p>
+    <p id="health" class="health">Checking server…</p>
+  </main>
+  <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+</body>
+</html>
