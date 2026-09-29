@@ -8,6 +8,8 @@
   const EPISODE_ID_RE = /^[0-9a-f]{32}$/;
   const RESTART_THRESHOLD_SECONDS = 3; // "Previous" restarts the line if it has played longer than this
   const WAVE_BARS = 28;
+  const VOICE_STORAGE_KEY = "podcast.voices";
+  const VOICE_UPDATE_TIMEOUT_MS = 240000;
 
   const params = new URLSearchParams(window.location.search);
   const episodeId = (params.get("id") || "").trim();
@@ -26,6 +28,13 @@
   const progressEl = document.getElementById("progress");
   const timeEl = document.getElementById("time-display");
   const volumeEl = document.getElementById("volume");
+  const voiceSettingsEl = document.getElementById("voice-settings");
+  const hostAVoiceEl = document.getElementById("host-a-voice");
+  const hostBVoiceEl = document.getElementById("host-b-voice");
+  const hostASampleBtn = document.getElementById("host-a-sample");
+  const hostBSampleBtn = document.getElementById("host-b-sample");
+  const voiceStatusEl = document.getElementById("voice-status");
+  const applyVoicesBtn = document.getElementById("apply-voices-btn");
 
   let languageNames = {};
   try {
@@ -34,10 +43,19 @@
     languageNames = {};
   }
 
+  let voiceOptionsByLanguage = {};
+  try {
+    voiceOptionsByLanguage = JSON.parse(document.getElementById("voice-options-data").textContent) || {};
+  } catch (err) {
+    voiceOptionsByLanguage = {};
+  }
+
   // ---------- playback state ----------
 
   const audio = new Audio();
   audio.preload = "auto";
+  const sampleAudio = new Audio();
+  sampleAudio.preload = "none";
 
   let segments = [];   // episode.conversation
   let bubbles = [];    // one element per segment
@@ -45,6 +63,18 @@
   let current = -1;    // index of the loaded segment, -1 = nothing loaded yet
   let finished = false;
   let seeking = false;
+  let currentLanguage = "";
+  let appliedVoices = {};
+  let savedVoiceChoices = {};
+  let sampleRequest = 0;
+  let applyingVoices = false;
+
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(VOICE_STORAGE_KEY) || "{}");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) savedVoiceChoices = saved;
+  } catch (err) {
+    savedVoiceChoices = {};
+  }
 
   // ---------- generic helpers ----------
 
@@ -100,6 +130,147 @@
     const s = total % 60;
     return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
   }
+
+  // ---------- voice settings and previews ----------
+
+  function voiceSelects() {
+    return [
+      { element: hostAVoiceEl, speaker: "host_a" },
+      { element: hostBVoiceEl, speaker: "host_b" },
+    ];
+  }
+
+  function selectedVoices() {
+    return {
+      host_a: hostAVoiceEl.value,
+      host_b: hostBVoiceEl.value,
+    };
+  }
+
+  function rememberSelectedVoices() {
+    if (!currentLanguage || voiceSettingsEl.hidden) return;
+    savedVoiceChoices[currentLanguage] = selectedVoices();
+    try {
+      window.localStorage.setItem(VOICE_STORAGE_KEY, JSON.stringify(savedVoiceChoices));
+    } catch (err) {
+      // The current selection still applies if browser storage is unavailable.
+    }
+  }
+
+  function updateApplyVoicesButton() {
+    if (!applyVoicesBtn || voiceSettingsEl.hidden) return;
+    const selected = selectedVoices();
+    const changed = selected.host_a !== appliedVoices.host_a || selected.host_b !== appliedVoices.host_b;
+    applyVoicesBtn.disabled = applyingVoices || !changed;
+    applyVoicesBtn.textContent = applyingVoices ? "Applying..." : "Apply to episode";
+  }
+
+  function setVoiceStatus(message) {
+    if (voiceStatusEl) voiceStatusEl.textContent = message || "";
+  }
+
+  function renderVoiceSettings(episode) {
+    if (!voiceSettingsEl || !hostAVoiceEl || !hostBVoiceEl) return;
+    currentLanguage = episode.language || "en";
+    const config = voiceOptionsByLanguage[currentLanguage];
+    if (!config || !Array.isArray(config.options) || !config.options.length) {
+      voiceSettingsEl.hidden = true;
+      return;
+    }
+
+    appliedVoices = episode.voices || config.defaults;
+    const saved = savedVoiceChoices[currentLanguage] || {};
+    voiceSelects().forEach(function (item) {
+      const select = item.element;
+      select.textContent = "";
+      config.options.forEach(function (voice) {
+        const option = document.createElement("option");
+        option.value = voice.id;
+        option.textContent = voice.label;
+        select.appendChild(option);
+      });
+      const ids = config.options.map(function (voice) { return voice.id; });
+      const requested = saved[item.speaker] || appliedVoices[item.speaker] || config.defaults[item.speaker];
+      select.value = ids.includes(requested) ? requested : config.defaults[item.speaker];
+      select.disabled = applyingVoices;
+    });
+    voiceSettingsEl.hidden = false;
+    setVoiceStatus("");
+    updateApplyVoicesButton();
+  }
+
+  function previewVoice(speaker) {
+    const voiceId = speaker === "host_a" ? hostAVoiceEl.value : hostBVoiceEl.value;
+    if (!voiceId || applyingVoices) return;
+    const requestId = ++sampleRequest;
+    sampleAudio.pause();
+    audio.pause();
+    setVoiceStatus("Loading voice sample...");
+    const query = new URLSearchParams({
+      language: currentLanguage,
+      speaker: speaker,
+      voice_id: voiceId,
+      request: String(requestId),
+    });
+    sampleAudio.src = "/api/tts/sample?" + query.toString();
+    const promise = sampleAudio.play();
+    if (promise && typeof promise.catch === "function") {
+      promise.catch(function () {
+        if (requestId === sampleRequest) setVoiceStatus("Unable to play this voice sample. Please try again.");
+      });
+    }
+  }
+
+  async function applyVoiceChanges() {
+    if (applyingVoices || applyVoicesBtn.disabled) return;
+    const voices = selectedVoices();
+    rememberSelectedVoices();
+    applyingVoices = true;
+    sampleRequest++;
+    sampleAudio.pause();
+    audio.pause();
+    voiceSelects().forEach(function (item) { item.element.disabled = true; });
+    hostASampleBtn.disabled = true;
+    hostBSampleBtn.disabled = true;
+    applyVoicesBtn.disabled = true;
+    applyVoicesBtn.textContent = "Applying...";
+    setVoiceStatus("Updating episode audio...");
+
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, VOICE_UPDATE_TIMEOUT_MS);
+    try {
+      const response = await fetch("/api/episode/" + encodeURIComponent(episodeId) + "/voices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voices: voices }),
+        signal: controller.signal,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data && typeof data.error === "string" ? data.error : "Unable to update episode voices.");
+      stopPlayback();
+      renderEpisode(data);
+      setVoiceStatus("Episode voices updated.");
+    } catch (err) {
+      setVoiceStatus(err.name === "AbortError" ? "Voice update timed out. Please try again." : err.message);
+    } finally {
+      clearTimeout(timer);
+      applyingVoices = false;
+      voiceSelects().forEach(function (item) { item.element.disabled = false; });
+      hostASampleBtn.disabled = false;
+      hostBSampleBtn.disabled = false;
+      updateApplyVoicesButton();
+    }
+  }
+
+  sampleAudio.addEventListener("playing", function () {
+    setVoiceStatus("Playing voice sample...");
+  });
+  sampleAudio.addEventListener("ended", function () {
+    setVoiceStatus("Sample finished.");
+  });
+  sampleAudio.addEventListener("error", function () {
+    if (sampleAudio.getAttribute("src")) setVoiceStatus("Unable to play this voice sample. Please try again.");
+  });
 
   // ---------- waveform ----------
 
@@ -318,6 +489,19 @@
     prevBtn.addEventListener("click", goPrevious);
     nextBtn.addEventListener("click", goNext);
     playBtn.addEventListener("click", togglePlay);
+    hostAVoiceEl.addEventListener("change", function () {
+      rememberSelectedVoices();
+      updateApplyVoicesButton();
+      previewVoice("host_a");
+    });
+    hostBVoiceEl.addEventListener("change", function () {
+      rememberSelectedVoices();
+      updateApplyVoicesButton();
+      previewVoice("host_b");
+    });
+    hostASampleBtn.addEventListener("click", function () { previewVoice("host_a"); });
+    hostBSampleBtn.addEventListener("click", function () { previewVoice("host_b"); });
+    applyVoicesBtn.addEventListener("click", applyVoiceChanges);
 
     progressEl.addEventListener("input", function () {
       seeking = true;
@@ -356,6 +540,10 @@
     audio.pause();
     audio.removeAttribute("src");
     audio.load();
+    sampleRequest++;
+    sampleAudio.pause();
+    sampleAudio.removeAttribute("src");
+    sampleAudio.load();
     current = -1;
     finished = false;
     playerEl.hidden = true;
@@ -380,6 +568,7 @@
       backToNewsEl.hidden = false;
     }
 
+    renderVoiceSettings(episode);
     segments = episode.conversation;
     bubbles = [];
     transcriptEl.textContent = "";

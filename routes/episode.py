@@ -13,12 +13,13 @@ It is re-validated with news_service.clean_articles before use.
 """
 import logging
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, Response, jsonify, render_template, request
 
 from config.config import Config
 from services.conversation_service import ConversationError
-from services.episode_service import create_episode, get_episode
+from services.episode_service import create_episode, get_episode, update_episode_voices
 from services.news_service import clean_articles
+from services import tts_service
 from services.tts_service import TTSError
 
 logger = logging.getLogger(__name__)
@@ -27,11 +28,26 @@ episode_bp = Blueprint("episode", __name__)
 
 ARTICLE_FIELDS = ("id", "title", "source", "url", "snippet", "published_at", "image_url")
 MAX_TOPIC_LENGTH = 200
+VOICE_SAMPLE_TEXT = {
+    "en": "Hello, welcome to your AI news podcast.",
+    "hi": "नमस्कार, आपके एआई समाचार पॉडकास्ट में आपका स्वागत है।",
+    "bn": "নমস্কার, আপনার এআই সংবাদ পডকাস্টে স্বাগতম।",
+    "te": "నమస్కారం, మీ ఏఐ వార్తల పోడ్‌కాస్ట్‌కు స్వాగతం.",
+    "ta": "வணக்கம், உங்கள் ஏஐ செய்தி பாட்காஸ்டுக்கு வரவேற்கிறோம்.",
+}
 
 
 @episode_bp.get("/conversation")
 def conversation_page():
-    return render_template("conversation.html", languages=Config.SUPPORTED_LANGUAGES)
+    try:
+        voice_options = tts_service.voice_options_by_language()
+    except TTSError:
+        voice_options = {}
+    return render_template(
+        "conversation.html",
+        languages=Config.SUPPORTED_LANGUAGES,
+        voice_options=voice_options,
+    )
 
 
 @episode_bp.post("/api/episode/create")
@@ -50,6 +66,15 @@ def create():
     if not isinstance(language, str) or language not in Config.SUPPORTED_LANGUAGES:
         return _error("That language is not supported.", 400)
 
+    voices = body.get("voices")
+    if voices is not None:
+        if not isinstance(voices, dict) or any(
+            not isinstance(voices.get(speaker), str) or not voices[speaker].strip()
+            for speaker in ("host_a", "host_b")
+        ):
+            return _error("Choose a voice for both hosts.", 400)
+        voices = {speaker: voices[speaker].strip() for speaker in ("host_a", "host_b")}
+
     topic = body.get("topic", "")
     topic = " ".join(topic.split())[:MAX_TOPIC_LENGTH] if isinstance(topic, str) else ""
 
@@ -64,7 +89,7 @@ def create():
         return _error("The selected articles are not valid. Please search again.", 400)
 
     try:
-        episode = create_episode(articles, language, topic)
+        episode = create_episode(articles, language, topic, voices)
     except (ConversationError, TTSError) as exc:
         return _error(exc.message, exc.status_code)
     except Exception:
@@ -79,6 +104,49 @@ def fetch(episode_id: str):
     episode = get_episode(episode_id)
     if episode is None:
         return _error("Episode not found. It may have expired, so please create it again.", 404)
+    return jsonify(episode)
+
+
+@episode_bp.get("/api/tts/sample")
+def voice_sample():
+    language = request.args.get("language", "")
+    speaker = request.args.get("speaker", "")
+    voice_id = request.args.get("voice_id", "").strip()
+    if language not in VOICE_SAMPLE_TEXT or speaker not in ("host_a", "host_b") or not voice_id:
+        return _error("That voice sample request is invalid.", 400)
+
+    try:
+        result = tts_service.generate_speech(VOICE_SAMPLE_TEXT[language], speaker, language, voice_id)
+    except TTSError as exc:
+        return _error(exc.message, exc.status_code)
+    return Response(
+        result.audio,
+        mimetype=result.mime_type,
+        headers={"Cache-Control": "no-store", "Content-Disposition": "inline"},
+    )
+
+
+@episode_bp.post("/api/episode/<episode_id>/voices")
+def update_voices(episode_id: str):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _error("Choose a voice for both hosts.", 400)
+    voices = body.get("voices")
+    if not isinstance(voices, dict) or any(
+        not isinstance(voices.get(speaker), str) or not voices[speaker].strip()
+        for speaker in ("host_a", "host_b")
+    ):
+        return _error("Choose a voice for both hosts.", 400)
+
+    try:
+        episode = update_episode_voices(
+            episode_id,
+            {speaker: voices[speaker].strip() for speaker in ("host_a", "host_b")},
+        )
+    except TTSError as exc:
+        return _error(exc.message, exc.status_code)
+    if episode is None:
+        return _error("Episode not found. Please create it again.", 404)
     return jsonify(episode)
 
 

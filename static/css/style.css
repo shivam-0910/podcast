@@ -119,3 +119,26 @@ h1 { letter-spacing: 0.15em; margin-bottom: 0.25rem; }
   .primary-btn { width: 100%; }
   .card-image { width: 100%; height: 160px; order: -1; }
 }
+
+/* Desktop action rail for news selection */
+@media (min-width: 801px) {
+  body.news-layout > .topbar,
+  body.news-layout > .container.wide { margin-left: 280px; }
+  body.news-layout > .container.wide { margin-right: auto; }
+  body.news-layout > .action-bar {
+    position: fixed; inset: 0 auto 0 0; z-index: 20; width: 280px;
+    min-height: 100vh; padding: 1.5rem; border-top: 0; border-right: 1px solid var(--border);
+    flex-direction: column; align-items: stretch; justify-content: space-between;
+  }
+  body.news-layout .selection-info { flex-direction: column; align-items: flex-start; gap: 0.65rem; }
+  body.news-layout .action-right { flex-direction: column; align-items: stretch; gap: 1rem; }
+  body.news-layout .language-picker { flex-direction: column; align-items: stretch; gap: 0.45rem; }
+  body.news-layout .language-select,
+  body.news-layout .primary-btn { width: 100%; max-width: none; }
+}
+
+@media (max-width: 800px) {
+  body.news-layout > .topbar,
+  body.news-layout > .container.wide { margin-left: 0; }
+  body.news-layout > .container.wide { margin-right: auto; }
+}

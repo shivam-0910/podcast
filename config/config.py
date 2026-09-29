@@ -42,6 +42,7 @@ class Config:
     # "edge" uses Microsoft's online neural voices without an API key; "mock" is for playback tests.
     TTS_PROVIDER: str = os.getenv("TTS_PROVIDER", "edge").strip().lower() or "edge"
     TTS_MAX_WORKERS: int = 4  # audio segments generated in parallel
+    EDGE_TTS_PROXY: str = os.getenv("EDGE_TTS_PROXY", "").strip()
 
     # App settings
     HOST: str = "127.0.0.1"

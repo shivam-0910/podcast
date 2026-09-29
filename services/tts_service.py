@@ -62,8 +62,11 @@ class TTSProvider(ABC):
     voices: dict[str, str] = {}                 # speaker -> vendor voice id
     supported_languages: frozenset[str] = frozenset()
 
-    def voice_for(self, speaker: str, language: str | None = None) -> str:
+    def voice_for(self, speaker: str, language: str | None = None, voice_id: str | None = None) -> str:
         return self.voices[speaker]
+
+    def voice_options(self, language: str) -> list[dict[str, str]]:
+        return []
 
     @abstractmethod
     def synthesize(self, text: str, voice: str, language: str) -> SpeechResult:
@@ -130,18 +133,53 @@ class EdgeTTSProvider(TTSProvider):
         "te": {"host_a": "te-IN-MohanNeural", "host_b": "te-IN-ShrutiNeural"},
         "ta": {"host_a": "ta-IN-ValluvarNeural", "host_b": "ta-IN-PallaviNeural"},
     }
+    _VOICE_OPTIONS = {
+        "en": [
+            {"id": "en-US-AndrewMultilingualNeural", "label": "Andrew (US English)"},
+            {"id": "en-US-BrianMultilingualNeural", "label": "Brian (US English)"},
+            {"id": "en-US-EmmaMultilingualNeural", "label": "Emma (US English)"},
+            {"id": "en-US-JennyNeural", "label": "Jenny (US English)"},
+        ],
+        "hi": [
+            {"id": "hi-IN-MadhurNeural", "label": "Madhur (Male)"},
+            {"id": "hi-IN-SwaraNeural", "label": "Swara (Female)"},
+        ],
+        "bn": [
+            {"id": "bn-IN-BashkarNeural", "label": "Bashkar (Male)"},
+            {"id": "bn-IN-TanishaaNeural", "label": "Tanishaa (Female)"},
+        ],
+        "te": [
+            {"id": "te-IN-MohanNeural", "label": "Mohan (Male)"},
+            {"id": "te-IN-ShrutiNeural", "label": "Shruti (Female)"},
+        ],
+        "ta": [
+            {"id": "ta-IN-ValluvarNeural", "label": "Valluvar (Male)"},
+            {"id": "ta-IN-PallaviNeural", "label": "Pallavi (Female)"},
+        ],
+    }
     supported_languages = frozenset(_LANGUAGE_VOICES)
     _TIMEOUT_SECONDS = 60
 
-    def voice_for(self, speaker: str, language: str | None = None) -> str:
+    def voice_for(self, speaker: str, language: str | None = None, voice_id: str | None = None) -> str:
         if language is None:
             return self.voices[speaker]
-        return self._LANGUAGE_VOICES[language][speaker]
+        if language not in self.supported_languages:
+            raise TTSError("That language is not supported by the selected TTS provider.", 400)
+        if voice_id is None:
+            return self._LANGUAGE_VOICES[language][speaker]
+        if voice_id not in {option["id"] for option in self.voice_options(language)}:
+            raise TTSError("That voice is not available for the selected language.", 400)
+        return voice_id
+
+    def voice_options(self, language: str) -> list[dict[str, str]]:
+        return list(self._VOICE_OPTIONS.get(language, []))
 
     def synthesize(self, text: str, voice: str, language: str) -> SpeechResult:
         async def collect_audio() -> bytes:
             chunks = []
-            async for chunk in edge_tts.Communicate(text, voice).stream():
+            async for chunk in edge_tts.Communicate(
+                text, voice, proxy=Config.EDGE_TTS_PROXY or None
+            ).stream():
                 if chunk["type"] == "audio":
                     data = chunk.get("data")
                     if isinstance(data, bytes):
@@ -153,8 +191,13 @@ class EdgeTTSProvider(TTSProvider):
         except asyncio.TimeoutError:
             raise TTSError("Voice generation took too long. Please try again.", 504) from None
         except Exception as exc:
-            logger.warning("Edge TTS request failed: %s", type(exc).__name__)
-            raise TTSError("Unable to generate voice audio right now. Please try again.", 502) from None
+            status = getattr(exc, "status", None)
+            logger.warning("Edge TTS request failed: %s (status=%s)", type(exc).__name__, status)
+            raise TTSError(
+                "Could not connect to the voice service. Check your internet connection or "
+                "configure EDGE_TTS_PROXY, then try again.",
+                502,
+            ) from None
         return SpeechResult(audio=audio, mime_type="audio/mpeg", extension="mp3")
 
 
@@ -192,6 +235,20 @@ def supported_languages() -> list[str]:
     return [code for code in Config.SUPPORTED_LANGUAGES if code in provider.supported_languages]
 
 
+def voice_options_by_language() -> dict[str, dict[str, Any]]:
+    """Return available voices and defaults for each language supported by the provider."""
+    provider = get_provider()
+    options = {}
+    for language in supported_languages():
+        choices = provider.voice_options(language)
+        if choices:
+            options[language] = {
+                "options": choices,
+                "defaults": {speaker: provider.voice_for(speaker, language) for speaker in SPEAKERS},
+            }
+    return options
+
+
 def ensure_language_supported(language: str) -> TTSProvider:
     """Return the current provider if it can speak `language`, otherwise raise TTSError (400).
 
@@ -209,7 +266,12 @@ def ensure_language_supported(language: str) -> TTSProvider:
 # Public API
 # ---------------------------------------------------------------------------
 
-def generate_speech(text: str, speaker: str, language: str) -> SpeechResult:
+def generate_speech(
+    text: str,
+    speaker: str,
+    language: str,
+    voice_id: str | None = None,
+) -> SpeechResult:
     """Generate speech for one conversation segment.
 
     speaker:  "host_a" or "host_b"
@@ -227,7 +289,7 @@ def generate_speech(text: str, speaker: str, language: str) -> SpeechResult:
 
     provider = ensure_language_supported(language)
 
-    voice = provider.voice_for(speaker, language)
+    voice = provider.voice_for(speaker, language, voice_id)
     try:
         result = provider.synthesize(text, voice, language)
     except TTSError:

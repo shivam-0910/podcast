@@ -79,6 +79,7 @@ Copy `.env.example` to `.env` and add your API keys. Optionally set `GROQ_MODEL`
 ```bash
 python app.py
 ```
+On Windows, if the virtual environment is not activated, run `venv\Scripts\python.exe app.py` to use the project environment.
 
 Open http://127.0.0.1:5000 in your browser.
 
@@ -95,7 +96,7 @@ Open http://127.0.0.1:5000 in your browser.
 
 ## Text-to-speech
 
-`services/tts_service.py` exposes `generate_speech(text, speaker, language)`. Providers sit behind a small `TTSProvider` interface, selected by `TTS_PROVIDER` in `.env` (default `edge`). Edge TTS uses Microsoft Edge's online neural voices without an API key and returns MP3 audio for English, Hindi, Bengali, Telugu, and Tamil. Odia isn't available in the current Edge voice catalog. The `mock` provider returns placeholder WAV tones for playback tests.
+`services/tts_service.py` exposes `generate_speech(text, speaker, language)`. Providers sit behind a small `TTSProvider` interface, selected by `TTS_PROVIDER` in `.env` (default `edge`). Edge TTS uses Microsoft Edge's online neural voices without an API key and returns MP3 audio for English, Hindi, Bengali, Telugu, and Tamil. On the conversation page, choose a voice for each host to hear a sample, then apply the choices to regenerate that episode's audio. Choices are remembered per language in the browser. Odia isn't available in the current Edge voice catalog. The `mock` provider returns placeholder WAV tones for playback tests.
 
 To add another provider: subclass `TTSProvider` and register it in `PROVIDERS`.
 
@@ -116,5 +117,5 @@ Audio is stored one file per line, never one big file: `audio/<episode_id>/001_h
 | 9 | TTS abstraction with mock and Edge providers | Done (Edge TTS is the default and needs no API key) |
 | 10 | One audio file per line saved in `audio/<episode_id>/`, served at `/audio/<episode_id>/<file>` | Done (the browser page does not play it yet; that is Step 11) |
 | 11-12 | Synchronized player and waveform | Not implemented |
-| 13 | Language selection | Not implemented (languages are defined in config only) |
+| 13 | Language and host voice selection | Done (voice choices are shown for languages supported by the selected TTS provider) |
 | 14 | SQLite persistence | Not implemented |

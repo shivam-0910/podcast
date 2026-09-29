@@ -47,16 +47,25 @@ _store_lock = threading.Lock()
 # Public API
 # ---------------------------------------------------------------------------
 
-def create_episode(articles: list[dict[str, Any]], language: str, topic: str = "") -> dict[str, Any]:
+def create_episode(
+    articles: list[dict[str, Any]],
+    language: str,
+    topic: str = "",
+    voices: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Generate the conversation, turn every line into an audio file, and remember the episode."""
     # Fail fast (before the Groq call) if the voice provider can't speak this language.
-    tts_service.ensure_language_supported(language)
+    provider = tts_service.ensure_language_supported(language)
+    selected_voices = {
+        speaker: provider.voice_for(speaker, language, voices.get(speaker) if voices else None)
+        for speaker in ("host_a", "host_b")
+    }
 
     generated = generate_conversation(articles, language)
     episode_id = uuid.uuid4().hex
 
     try:
-        segments = _build_segments(episode_id, generated["conversation"], language)
+        segments = _build_segments(episode_id, generated["conversation"], language, selected_voices)
     except BaseException:
         _delete_audio(episode_id)  # never leave a half-built episode on disk
         raise
@@ -66,6 +75,7 @@ def create_episode(articles: list[dict[str, Any]], language: str, topic: str = "
         "title": generated["episode_title"],
         "topic": topic,
         "language": language,
+        "voices": selected_voices,
         "conversation": segments,
     }
     _remember(episode)
@@ -81,6 +91,70 @@ def get_episode(episode_id: str) -> dict[str, Any] | None:
         return copy.deepcopy(episode) if episode else None
 
 
+def update_episode_voices(episode_id: str, voices: dict[str, str]) -> dict[str, Any] | None:
+    """Regenerate an episode's audio with new voices, keeping old files until all succeed."""
+    episode = get_episode(episode_id)
+    if episode is None:
+        return None
+
+    language = episode["language"]
+    provider = tts_service.ensure_language_supported(language)
+    selected_voices = {
+        speaker: provider.voice_for(speaker, language, voices[speaker])
+        for speaker in ("host_a", "host_b")
+    }
+    audio_dir = _audio_dir(episode_id)
+    if not audio_dir.is_dir():
+        raise TTSError("Episode audio is no longer available. Please create the podcast again.", 404)
+
+    staging_dir = audio_dir / (".voice-update-" + uuid.uuid4().hex)
+    cache_version = uuid.uuid4().hex
+    try:
+        staging_dir.mkdir()
+
+        def render(item: tuple[int, dict[str, Any]]) -> dict[str, Any]:
+            index, segment = item
+            result = _speech_with_retry(
+                segment["text"], segment["speaker"], language, selected_voices[segment["speaker"]]
+            )
+            filename = f"{index:03d}_{segment['speaker']}.{result.extension}"
+            _write_atomic(staging_dir / filename, result.audio)
+            return {
+                "id": segment["id"],
+                "speaker": segment["speaker"],
+                "text": segment["text"],
+                "audio_url": f"/audio/{episode_id}/{filename}?v={cache_version}",
+            }
+
+        with ThreadPoolExecutor(max_workers=max(1, Config.TTS_MAX_WORKERS)) as pool:
+            segments = list(pool.map(render, enumerate(episode["conversation"], start=1)))
+
+        for segment in segments:
+            filename = segment["audio_url"].split("?", 1)[0].rsplit("/", 1)[-1]
+            os.replace(staging_dir / filename, audio_dir / filename)
+
+        new_files = {
+            segment["audio_url"].split("?", 1)[0].rsplit("/", 1)[-1]
+            for segment in segments
+        }
+        for old_segment in episode["conversation"]:
+            old_filename = old_segment["audio_url"].split("?", 1)[0].rsplit("/", 1)[-1]
+            if old_filename not in new_files:
+                (audio_dir / old_filename).unlink(missing_ok=True)
+    except TTSError:
+        raise
+    except OSError:
+        logger.exception("Could not replace episode audio")
+        raise TTSError("Unable to update episode audio right now. Please try again.", 500) from None
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+
+    episode["voices"] = selected_voices
+    episode["conversation"] = segments
+    _remember(episode)
+    return copy.deepcopy(episode)
+
+
 # ---------------------------------------------------------------------------
 # Audio segments
 # ---------------------------------------------------------------------------
@@ -89,7 +163,12 @@ def _audio_dir(episode_id: str) -> Path:
     return Path(Config.AUDIO_DIR) / episode_id
 
 
-def _build_segments(episode_id: str, turns: list[dict[str, str]], language: str) -> list[dict[str, Any]]:
+def _build_segments(
+    episode_id: str,
+    turns: list[dict[str, str]],
+    language: str,
+    voices: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """Generate all segment audio files (in parallel) and return segments in conversation order."""
     try:
         _audio_dir(episode_id).mkdir(parents=True, exist_ok=False)
@@ -99,14 +178,21 @@ def _build_segments(episode_id: str, turns: list[dict[str, str]], language: str)
 
     def render(item: tuple[int, dict[str, str]]) -> dict[str, Any]:
         index, turn = item
-        return _render_segment(episode_id, index, turn, language)
+        return _render_segment(episode_id, index, turn, language, voices)
 
     with ThreadPoolExecutor(max_workers=max(1, Config.TTS_MAX_WORKERS)) as pool:
         return list(pool.map(render, enumerate(turns, start=1)))  # keeps conversation order
 
 
-def _render_segment(episode_id: str, index: int, turn: dict[str, str], language: str) -> dict[str, Any]:
-    result = _speech_with_retry(turn["text"], turn["speaker"], language)
+def _render_segment(
+    episode_id: str,
+    index: int,
+    turn: dict[str, str],
+    language: str,
+    voices: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    voice_id = voices.get(turn["speaker"]) if voices else None
+    result = _speech_with_retry(turn["text"], turn["speaker"], language, voice_id)
     filename = f"{index:03d}_{turn['speaker']}.{result.extension}"
 
     try:
@@ -123,15 +209,20 @@ def _render_segment(episode_id: str, index: int, turn: dict[str, str], language:
     }
 
 
-def _speech_with_retry(text: str, speaker: str, language: str):
+def _speech_with_retry(text: str, speaker: str, language: str, voice_id: str | None = None):
     """One retry for transient provider failures (502/504); other errors are final."""
+    def generate():
+        if voice_id is None:
+            return tts_service.generate_speech(text, speaker, language)
+        return tts_service.generate_speech(text, speaker, language, voice_id)
+
     try:
-        return tts_service.generate_speech(text, speaker, language)
+        return generate()
     except TTSError as exc:
         if exc.status_code not in _RETRYABLE_TTS_STATUS:
             raise
         logger.info("Retrying TTS after a transient failure")
-        return tts_service.generate_speech(text, speaker, language)
+        return generate()
 
 
 def _write_atomic(path: Path, data: bytes) -> None:

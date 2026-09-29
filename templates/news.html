@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>News Results - AI News Podcast</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/language-additions.css') }}">
 </head>
-<body>
+<body class="news-layout">
   <header class="topbar">
     <a class="back-link" href="{{ url_for('index') }}">&larr; AI NEWSCAST</a>
     <form class="search-form compact" action="{{ url_for('news.news_page') }}" method="get" autocomplete="off">

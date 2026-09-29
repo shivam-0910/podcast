@@ -64,3 +64,72 @@
   .controls-main { margin: 0; }
   .volume { width: 70px; }
 }
+
+.voice-settings {
+  margin: 1.25rem 0 1.5rem; padding: 1rem 1.1rem;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+}
+.voice-settings[hidden] { display: none; }
+.voice-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.voice-eyebrow { margin: 0 0 0.15rem; color: var(--muted); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
+.voice-settings-heading h2 { margin: 0; font-size: 1rem; }
+.host-voice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin-top: 0.85rem; }
+.host-voice-control { display: grid; grid-template-columns: auto minmax(0, 1fr) 2.5rem; align-items: center; gap: 0.55rem; color: var(--muted); font-size: 0.85rem; }
+.voice-select {
+  min-width: 0; width: 100%; padding: 0.55rem 0.65rem; border: 1px solid var(--border);
+  border-radius: 7px; background: #12151a; color: var(--text); font: inherit; cursor: pointer;
+}
+.voice-select:hover:not(:disabled) { border-color: var(--accent); }
+.voice-select:disabled { opacity: 0.55; cursor: not-allowed; }
+.voice-sample-btn {
+  width: 2.5rem; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 50%;
+  background: var(--card-hover); color: var(--text); cursor: pointer;
+}
+.voice-sample-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.voice-sample-btn:disabled { opacity: 0.5; cursor: wait; }
+.voice-status { min-height: 1.25rem; margin: 0.55rem 0 0; color: var(--muted); font-size: 0.8rem; }
+.voice-settings .secondary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .voice-settings { padding: 0.85rem; }
+  .voice-settings-heading { align-items: flex-start; }
+  .host-voice-grid { grid-template-columns: 1fr; }
+  .host-voice-control { grid-template-columns: 3.5rem minmax(0, 1fr) 2.5rem; }
+}
+
+/* Desktop playback rail; it becomes a bottom dock on compact screens. */
+body.player-layout > .player[hidden] { display: none; }
+
+@media (min-width: 801px) {
+  body.player-layout > .topbar,
+  body.player-layout > .container.conversation { margin-left: 280px; }
+  body.player-layout > .container.conversation { margin-right: auto; padding-bottom: 4rem; }
+  body.player-layout > .player {
+    inset: 0 auto 0 0; width: 280px; min-height: 100vh; padding: 1.5rem 1.25rem;
+    border-top: 0; border-right: 1px solid var(--border); display: flex;
+    flex-direction: column; justify-content: center; gap: 1.1rem;
+  }
+  body.player-layout > .player > * { width: 100%; max-width: 100%; margin-left: 0; margin-right: 0; }
+  body.player-layout .waveform { height: 64px; margin: 0; }
+  body.player-layout .player-row,
+  body.player-layout .player-row.controls { flex-direction: column; align-items: stretch; gap: 0.75rem; }
+  body.player-layout .time-display { min-width: 0; text-align: center; }
+  body.player-layout .progress { width: 100%; }
+  body.player-layout .controls-main { margin: 0 auto; }
+  body.player-layout .volume-wrap { justify-content: center; }
+}
+
+@media (max-width: 800px) {
+  body.player-layout > .topbar,
+  body.player-layout > .container.conversation { margin-left: 0; }
+  body.player-layout > .container.conversation { padding-bottom: 14rem; }
+  body.player-layout > .player {
+    inset: auto 0 0; width: auto; min-height: 0; padding: 0.75rem 1.25rem 1rem;
+    border-top: 1px solid var(--border); border-right: 0; display: block;
+  }
+  body.player-layout > .player > * { width: auto; max-width: 760px; margin-left: auto; margin-right: auto; }
+  body.player-layout .player-row,
+  body.player-layout .player-row.controls { flex-direction: row; align-items: center; }
+  body.player-layout .controls-main { margin: 0 auto; }
+  body.player-layout .time-display { text-align: left; }
+}

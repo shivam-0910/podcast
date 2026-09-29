@@ -26,7 +26,6 @@
   const noteEl = document.getElementById("selection-note");
   const createBtn = document.getElementById("create-btn");
   const languageEl = document.getElementById("language-select");
-
   const selected = new Map(); // article id -> article (insertion-ordered)
   let creating = false;
 
@@ -179,6 +178,7 @@
 
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, CREATE_TIMEOUT_MS);
+    const payload = { topic: topic, language: language, articles: articles };
 
     let response = null;
     let data = null;
@@ -187,7 +187,7 @@
       response = await fetch("/api/episode/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: topic, language: language, articles: articles }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
       data = await response.json();
