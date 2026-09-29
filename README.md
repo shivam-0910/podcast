@@ -87,6 +87,7 @@ Open http://127.0.0.1:5000 in your browser.
 - `GET /` search page
 - `GET /news?q=<topic>` news results page (fetches `/api/search` from the browser)
 - `GET /conversation?id=<episode_id>` conversation screen (opened automatically after CREATE AI PODCAST)
+- `GET /audio/<episode_id>/<filename>` serves one audio segment (e.g. `001_host_a.wav`), with Range support
 - `GET /api/episode/<episode_id>` returns a created episode, or 404. Episodes are held in memory until SQLite is added in Step 14, so they are lost when the server restarts
 - `POST /api/episode/create` body `{articles: [...], language, topic}` returns `{episode_id, title, topic, language, conversation: [{id, speaker, text, audio_url}]}`; `audio_url` is `null` until TTS is added
 - `GET /api/health` returns `{"status": "ok"}`
@@ -97,6 +98,8 @@ Open http://127.0.0.1:5000 in your browser.
 `services/tts_service.py` exposes `generate_speech(text, speaker, language)`. Vendors sit behind a small `TTSProvider` interface, selected by the optional `TTS_PROVIDER` variable in `.env` (default `mock`). The mock provider needs no key and returns a WAV tone (different pitch for Host A and Host B) so playback can be tested before a real voice provider is chosen.
 
 To add a real provider: subclass `TTSProvider`, register it in `PROVIDERS`, then set `TTS_PROVIDER` and `TTS_API_KEY`.
+
+Audio is stored one file per line, never one big file: `audio/<episode_id>/001_host_a.<ext>`, `002_host_b.<ext>`, and so on. The extension comes from the TTS provider (the mock produces `.wav`). Files are deleted when their episode is evicted from the in-memory store or if episode creation fails. Audio left over from a previous server run is not cleaned up until SQLite persistence is added in Step 14.
 
 ## Development status
 
@@ -111,8 +114,7 @@ To add a real provider: subclass `TTSProvider`, register it in `PROVIDERS`, then
 | 7 | Groq conversation generation, `POST /api/episode/create` | Done (tested with mocked Groq responses; needs your `GROQ_API_KEY` for live results) |
 | 8 | Conversation screen with Host A / Host B transcript bubbles | Done (transcript only; playback, highlighting and waveform come in Steps 10-12) |
 | 9 | TTS abstraction (`generate_speech`) with a mock provider | Done (the mock plays a placeholder tone per line, not real speech; no real TTS vendor is connected yet) |
-| 10 | Audio segments saved to `audio/` and served to the browser | Not implemented |
+| 10 | One audio file per line saved in `audio/<episode_id>/`, served at `/audio/<episode_id>/<file>` | Done (the browser page does not play it yet; that is Step 11) |
 | 11-12 | Synchronized player and waveform | Not implemented |
 | 13 | Language selection | Not implemented (languages are defined in config only) |
 | 14 | SQLite persistence | Not implemented |
-# podcast

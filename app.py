@@ -4,6 +4,7 @@ import logging
 from flask import Flask, jsonify, render_template
 
 from config.config import Config
+from routes.audio import audio_bp
 from routes.episode import episode_bp
 from routes.news import news_bp
 from routes.search import search_bp
@@ -18,7 +19,7 @@ def create_app() -> Flask:
     app.register_blueprint(search_bp)
     app.register_blueprint(news_bp)
     app.register_blueprint(episode_bp)
-    # audio blueprint is registered here when it is built (Step 10).
+    app.register_blueprint(audio_bp)
 
     @app.get("/")
     def index():

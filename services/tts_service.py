@@ -146,6 +146,19 @@ def supported_languages() -> list[str]:
     return [code for code in Config.SUPPORTED_LANGUAGES if code in provider.supported_languages]
 
 
+def ensure_language_supported(language: str) -> TTSProvider:
+    """Return the current provider if it can speak `language`, otherwise raise TTSError (400).
+
+    Lets callers fail fast, before spending time on conversation generation.
+    """
+    if language not in Config.SUPPORTED_LANGUAGES:
+        raise TTSError("That language is not supported.", 400)
+    provider = get_provider()
+    if language not in provider.supported_languages:
+        raise TTSError(f"Voices for {Config.SUPPORTED_LANGUAGES[language]} are not available yet.", 400)
+    return provider
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -166,10 +179,7 @@ def generate_speech(text: str, speaker: str, language: str) -> SpeechResult:
     if len(text) > MAX_TEXT_LENGTH:
         raise TTSError("That text is too long to turn into speech.", 400)
 
-    provider = get_provider()
-    if language not in provider.supported_languages:
-        language_name = Config.SUPPORTED_LANGUAGES[language]
-        raise TTSError(f"Voices for {language_name} are not available yet.", 400)
+    provider = ensure_language_supported(language)
 
     voice = provider.voice_for(speaker)
     try:

@@ -19,6 +19,7 @@ from config.config import Config
 from services.conversation_service import ConversationError
 from services.episode_service import create_episode, get_episode
 from services.news_service import clean_articles
+from services.tts_service import TTSError
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def create():
 
     try:
         episode = create_episode(articles, language, topic)
-    except ConversationError as exc:
+    except (ConversationError, TTSError) as exc:
         return _error(exc.message, exc.status_code)
     except Exception:
         logger.exception("Unexpected error creating episode")

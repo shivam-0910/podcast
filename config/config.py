@@ -42,6 +42,7 @@ class Config:
     # Text-to-speech. TTS_PROVIDER selects a provider registered in services/tts_service.py.
     # "mock" needs no key and produces placeholder tones so the rest of the app can be tested.
     TTS_PROVIDER: str = os.getenv("TTS_PROVIDER", "mock").strip().lower() or "mock"
+    TTS_MAX_WORKERS: int = 4  # audio segments generated in parallel
 
     # App settings
     HOST: str = "127.0.0.1"
