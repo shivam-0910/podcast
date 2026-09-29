@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Conversation - AI News Podcast</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/player-additions.css') }}">
 </head>
-<body class="player-layout">
+<body class="conversation-layout">
   <header class="topbar">
     <a class="back-link" href="{{ url_for('index') }}">&larr; AI NEWSCAST</a>
     <a id="back-to-news" class="text-link" href="{{ url_for('news.news_page') }}" hidden>Back to news</a>
@@ -16,28 +15,6 @@
   <main class="container conversation">
     <h1 id="episode-title" class="episode-heading">Loading episode&hellip;</h1>
     <p id="episode-meta" class="episode-meta"></p>
-    <section id="voice-settings" class="voice-settings" aria-labelledby="voice-settings-title" hidden>
-      <div class="voice-settings-heading">
-        <div>
-          <p class="voice-eyebrow">VOICE CAST</p>
-          <h2 id="voice-settings-title">Choose host voices</h2>
-        </div>
-        <button id="apply-voices-btn" type="button" class="secondary-btn" disabled>Apply to episode</button>
-      </div>
-      <div class="host-voice-grid">
-        <div class="host-voice-control">
-          <label for="host-a-voice">Host A</label>
-          <select id="host-a-voice" class="voice-select" aria-label="Host A voice"></select>
-          <button id="host-a-sample" type="button" class="voice-sample-btn" aria-label="Play Host A voice sample" title="Play Host A voice sample">&#9654;</button>
-        </div>
-        <div class="host-voice-control">
-          <label for="host-b-voice">Host B</label>
-          <select id="host-b-voice" class="voice-select" aria-label="Host B voice"></select>
-          <button id="host-b-sample" type="button" class="voice-sample-btn" aria-label="Play Host B voice sample" title="Play Host B voice sample">&#9654;</button>
-        </div>
-      </div>
-      <p id="voice-status" class="voice-status" role="status" aria-live="polite"></p>
-    </section>
     <div id="status" class="status" role="status"></div>
     <div id="transcript" class="transcript" aria-live="off"></div>
   </main>
@@ -62,7 +39,6 @@
   </section>
 
   <script id="languages-data" type="application/json">{{ languages|tojson }}</script>
-  <script id="voice-options-data" type="application/json">{{ voice_options|tojson }}</script>
   <script src="{{ url_for('static', filename='js/player.js') }}"></script>
 </body>
 </html>

@@ -2,4 +2,4 @@ Flask
 python-dotenv
 requests
 groq
-edge-tts>=7.2.8
+edge-tts

@@ -8,6 +8,7 @@
   const GENERIC_ERROR = "Unable to search for news right now. Please try again.";
   const CREATE_ERROR = "Unable to create the podcast right now. Please try again.";
   const MAX_SELECTED = 5;
+  const SINGLE_PAGE_VIEW = true; // one article per screen; set false to restore the two-page desktop spread
   const FALLBACK_LANGUAGE = "en"; // only used if the selector is missing from the page
   const LANGUAGE_STORAGE_KEY = "podcast.language";
   const CREATE_TIMEOUT_MS = 90000;
@@ -28,6 +29,9 @@
   const languageEl = document.getElementById("language-select");
   const selected = new Map(); // article id -> article (insertion-ordered)
   let creating = false;
+  let articleResults = [];
+  let currentIndex = 0;
+  let mobileLayout = null;
 
   // ---------- helpers ----------
 
@@ -41,8 +45,9 @@
     }
   }
 
-  function showMessage(text, withRetry) {
+  function showMessage(text, withRetry, isLoading) {
     statusEl.textContent = "";
+    statusEl.classList.toggle("is-loading", Boolean(isLoading));
     const p = document.createElement("p");
     p.textContent = text;
     statusEl.appendChild(p);
@@ -59,6 +64,7 @@
 
   function clearMessage() {
     statusEl.textContent = "";
+    statusEl.classList.remove("is-loading");
   }
 
   function setNote(text) {
@@ -104,17 +110,17 @@
 
   function updateSelectionUI() {
     const count = selected.size;
-    countEl.textContent = count + " selected";
+    countEl.textContent = count + (count === 1 ? " story selected" : " stories selected");
     clearBtn.hidden = count === 0 || creating;
     createBtn.disabled = count === 0 || creating;
     if (languageEl) languageEl.disabled = creating; // language is locked while an episode is being made
   }
 
-  function setCardSelected(card, isSelected) {
-    card.classList.toggle("selected", isSelected);
+  function setPageSelected(page, isSelected) {
+    page.classList.toggle("selected", isSelected);
   }
 
-  function handleToggle(article, card, checkbox) {
+  function handleToggle(article, page, checkbox) {
     if (creating) {
       checkbox.checked = !checkbox.checked; // selection is locked while an episode is being created
       return;
@@ -126,10 +132,10 @@
         return;
       }
       selected.set(article.id, article);
-      setCardSelected(card, true);
+      setPageSelected(page, true);
     } else {
       selected.delete(article.id);
-      setCardSelected(card, false);
+      setPageSelected(page, false);
     }
     setNote("");
     updateSelectionUI();
@@ -138,9 +144,9 @@
   function clearSelection() {
     if (creating) return;
     selected.clear();
-    resultsEl.querySelectorAll(".card").forEach(function (card) {
-      setCardSelected(card, false);
-      const checkbox = card.querySelector(".card-check");
+    resultsEl.querySelectorAll(".newspaper-page").forEach(function (page) {
+      setPageSelected(page, false);
+      const checkbox = page.querySelector(".paper-check");
       if (checkbox) checkbox.checked = false;
     });
     setNote("");
@@ -220,76 +226,171 @@
 
   // ---------- rendering ----------
 
-  function createCard(article) {
-    const card = document.createElement("article");
-    card.className = "card";
-    card.dataset.articleId = article.id;
+  function textElement(tagName, className, text) {
+    const element = document.createElement(tagName);
+    element.className = className;
+    element.textContent = text;
+    return element;
+  }
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "card-check";
-    checkbox.value = article.id;
-    checkbox.setAttribute("aria-label", "Select article: " + article.title);
-    checkbox.addEventListener("change", function () {
-      handleToggle(article, card, checkbox);
-    });
-    card.appendChild(checkbox);
+  function createArticlePage(article, index) {
+    const page = document.createElement("article");
+    page.className = "newspaper-page";
+    page.dataset.articleId = article.id;
+    page.setAttribute("aria-label", "Page " + (index + 1) + ": " + article.title);
+
+    const section = textElement("p", "paper-section", topic || "News");
+    page.appendChild(section);
+    page.appendChild(textElement("h3", "paper-headline", article.title || "Untitled story"));
 
     const body = document.createElement("div");
-    body.className = "card-body";
-
-    const heading = document.createElement("h3");
-    heading.className = "card-title";
-    heading.textContent = article.title;
-    body.appendChild(heading);
-
-    const meta = document.createElement("p");
-    meta.className = "card-meta";
-    meta.textContent = [article.source, article.published_at].filter(Boolean).join(" \u2022 ");
-    body.appendChild(meta);
-
-    if (article.snippet) {
-      const snippet = document.createElement("p");
-      snippet.className = "card-snippet";
-      snippet.textContent = article.snippet;
-      body.appendChild(snippet);
-    }
-
-    card.appendChild(body);
-
+    body.className = "paper-body";
     if (isHttpUrl(article.image_url)) {
-      const img = document.createElement("img");
-      img.className = "card-image";
-      img.src = article.image_url;
-      img.alt = "";
-      img.loading = "lazy";
-      img.referrerPolicy = "no-referrer";
-      img.addEventListener("error", function () {
-        img.remove();
+      const figure = document.createElement("figure");
+      figure.className = "paper-figure";
+      const image = document.createElement("img");
+      image.src = article.image_url;
+      image.alt = "";
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.referrerPolicy = "no-referrer";
+      image.addEventListener("error", function () {
+        figure.remove();
+        body.classList.add("no-image");
       });
-      card.appendChild(img);
+      figure.appendChild(image);
+      body.appendChild(figure);
+    } else {
+      body.classList.add("no-image");
     }
 
-    // Clicking anywhere on the card (except the checkbox itself) toggles selection.
-    card.addEventListener("click", function (event) {
-      if (event.target.closest("input")) return;
+    const text = document.createElement("div");
+    text.className = "paper-text";
+    if (article.snippet) {
+      text.appendChild(textElement("p", "paper-story", article.snippet));
+    }
+    const metadata = [article.source, article.published_at].filter(Boolean).join(" \u2022 ");
+    if (metadata) text.appendChild(textElement("p", "paper-meta", metadata));
+    body.appendChild(text);
+    page.appendChild(body);
+
+    const footer = document.createElement("div");
+    footer.className = "paper-page-footer";
+    if (isHttpUrl(article.url)) {
+      const link = textElement("a", "paper-read-link", "READ FULL ARTICLE \u2192");
+      link.href = article.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      footer.appendChild(link);
+    }
+
+    const selectLabel = document.createElement("label");
+    selectLabel.className = "paper-select";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "paper-check";
+    checkbox.value = article.id;
+    checkbox.checked = selected.has(article.id);
+    checkbox.setAttribute("aria-label", "Select article: " + article.title);
+    checkbox.addEventListener("change", function () {
+      handleToggle(article, page, checkbox);
+    });
+    selectLabel.append(checkbox, document.createTextNode(" Select this story"));
+    footer.appendChild(selectLabel);
+    footer.appendChild(textElement("span", "paper-page-number", "PAGE " + (index + 1)));
+    page.appendChild(footer);
+
+    setPageSelected(page, checkbox.checked);
+    page.addEventListener("click", function (event) {
+      if (event.target.closest("a, input, label, button")) return;
       checkbox.click();
     });
+    return page;
+  }
 
-    return card;
+  function isMobileSpread() {
+    if (SINGLE_PAGE_VIEW) return true;
+    return window.matchMedia("(max-width: 1100px)").matches;
+  }
+
+  function renderSpread(direction) {
+    resultsEl.textContent = "";
+    const mobile = isMobileSpread();
+    mobileLayout = mobile;
+    const start = mobile ? currentIndex : Math.floor(currentIndex / 2) * 2;
+    currentIndex = start;
+
+    const edition = document.createElement("section");
+    edition.className = "newspaper-edition";
+    const masthead = document.createElement("header");
+    masthead.className = "newspaper-masthead";
+    masthead.appendChild(textElement("p", "masthead-kicker", "Independent news, clearly told"));
+    masthead.appendChild(textElement("h1", "masthead-title", "THE AI NEWSCAST"));
+    masthead.appendChild(textElement("p", "masthead-date", new Intl.DateTimeFormat(undefined, {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+    }).format(new Date()).toUpperCase()));
+    edition.appendChild(masthead);
+
+    const editionLine = textElement("p", "edition-topic", "NEWS ON: " + topic);
+    edition.appendChild(editionLine);
+
+    const spread = document.createElement("div");
+    spread.className = "newspaper-spread" + (direction ? " turn-" + direction : "");
+    const end = Math.min(start + (mobile ? 1 : 2), articleResults.length);
+    for (let index = start; index < end; index += 1) {
+      spread.appendChild(createArticlePage(articleResults[index], index));
+    }
+    if (!mobile && end === articleResults.length && articleResults.length % 2 === 1) {
+      const blankPage = document.createElement("div");
+      blankPage.className = "newspaper-page newspaper-page-empty";
+      blankPage.setAttribute("aria-label", "Blank page");
+      blankPage.setAttribute("aria-hidden", "true");
+      spread.appendChild(blankPage);
+    }
+    edition.appendChild(spread);
+
+    const navigation = document.createElement("nav");
+    navigation.className = "newspaper-navigation";
+    navigation.setAttribute("aria-label", "Newspaper pages");
+    const previous = textElement("button", "page-nav-button", "\u25c0 PREVIOUS");
+    previous.type = "button";
+    previous.disabled = start === 0;
+    previous.addEventListener("click", function () { navigateSpread(-1); });
+    const current = mobile
+      ? "PAGE " + (start + 1) + " OF " + articleResults.length
+      : "PAGES " + (start + 1) + "\u2013" + end + " OF " + articleResults.length;
+    navigation.append(previous, textElement("span", "spread-count", current));
+    const next = textElement("button", "page-nav-button", "NEXT \u25b6");
+    next.type = "button";
+    next.disabled = end >= articleResults.length;
+    next.addEventListener("click", function () { navigateSpread(1); });
+    navigation.appendChild(next);
+    edition.appendChild(navigation);
+    resultsEl.appendChild(edition);
+  }
+
+  function navigateSpread(direction) {
+    const step = isMobileSpread() ? 1 : 2;
+    const lastStart = isMobileSpread()
+      ? articleResults.length - 1
+      : Math.floor((articleResults.length - 1) / 2) * 2;
+    currentIndex = Math.max(0, Math.min(currentIndex + direction * step, lastStart));
+    renderSpread(direction > 0 ? "next" : "previous");
   }
 
   function renderArticles(articles) {
-    resultsEl.textContent = "";
-    articles.forEach(function (article) {
-      resultsEl.appendChild(createCard(article));
-    });
+    articleResults = articles;
+    currentIndex = 0;
+    renderSpread("");
   }
 
   // ---------- loading ----------
 
   async function loadNews() {
     resultsEl.textContent = "";
+    articleResults = [];
+    currentIndex = 0;
+    mobileLayout = isMobileSpread();
     selected.clear();
     setNote("");
     updateSelectionUI();
@@ -301,7 +402,7 @@
     }
 
     titleEl.textContent = "News about \u201C" + topic + "\u201D";
-    showMessage("Searching for news\u2026", false);
+    showMessage("Searching the wires\u2026", false, true);
 
     let response;
     let data = null;
@@ -339,6 +440,9 @@
   clearBtn.addEventListener("click", clearSelection);
   createBtn.addEventListener("click", handleCreate);
   if (languageEl) languageEl.addEventListener("change", rememberLanguage);
+  window.addEventListener("resize", function () {
+    if (articleResults.length > 0 && isMobileSpread() !== mobileLayout) renderSpread("");
+  });
 
   // Coming back with the browser Back button can restore this page from cache in its "creating" state.
   window.addEventListener("pageshow", function (event) {
