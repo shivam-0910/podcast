@@ -5,19 +5,20 @@ The rest of the app only calls:
     generate_speech(text, speaker, language) -> SpeechResult
 
 and never touches a TTS vendor directly. Vendors live behind the small TTSProvider interface and
-are registered by name in PROVIDERS; Config.TTS_PROVIDER picks which one is used (default: "mock").
+are registered by name in PROVIDERS; Config.TTS_PROVIDER picks which one is used (default: "edge").
 
 Speakers map to voices per provider:  host_a -> voice A,  host_b -> voice B.
 
 To add a real vendor later:
     1. subclass TTSProvider (set `name`, `voices`, `supported_languages`, implement `synthesize`)
     2. add it to PROVIDERS
-    3. set TTS_PROVIDER=<name> and TTS_API_KEY in .env
+    3. set TTS_PROVIDER=<name> and any provider-specific configuration in .env
 Nothing else in the app needs to change.
 
 Failures are raised as TTSError with a user-safe message and HTTP status code.
 Raw provider errors and API keys are never exposed to callers.
 """
+import asyncio
 import io
 import logging
 import math
@@ -26,6 +27,7 @@ from abc import ABC, abstractmethod
 from array import array
 from dataclasses import dataclass
 from typing import Any
+import edge_tts
 
 from config.config import Config
 
@@ -60,7 +62,7 @@ class TTSProvider(ABC):
     voices: dict[str, str] = {}                 # speaker -> vendor voice id
     supported_languages: frozenset[str] = frozenset()
 
-    def voice_for(self, speaker: str) -> str:
+    def voice_for(self, speaker: str, language: str | None = None) -> str:
         return self.voices[speaker]
 
     @abstractmethod
@@ -113,6 +115,49 @@ class MockTTSProvider(TTSProvider):
         return SpeechResult(audio=buffer.getvalue(), mime_type="audio/wav", extension="wav")
 
 
+class EdgeTTSProvider(TTSProvider):
+    """Generates speech with Microsoft Edge's online neural voices via edge-tts."""
+
+    name = "edge"
+    voices = {
+        "host_a": "en-US-AndrewMultilingualNeural",
+        "host_b": "en-US-EmmaMultilingualNeural",
+    }
+    _LANGUAGE_VOICES = {
+        "en": voices,
+        "hi": {"host_a": "hi-IN-MadhurNeural", "host_b": "hi-IN-SwaraNeural"},
+        "bn": {"host_a": "bn-IN-BashkarNeural", "host_b": "bn-IN-TanishaaNeural"},
+        "te": {"host_a": "te-IN-MohanNeural", "host_b": "te-IN-ShrutiNeural"},
+        "ta": {"host_a": "ta-IN-ValluvarNeural", "host_b": "ta-IN-PallaviNeural"},
+    }
+    supported_languages = frozenset(_LANGUAGE_VOICES)
+    _TIMEOUT_SECONDS = 60
+
+    def voice_for(self, speaker: str, language: str | None = None) -> str:
+        if language is None:
+            return self.voices[speaker]
+        return self._LANGUAGE_VOICES[language][speaker]
+
+    def synthesize(self, text: str, voice: str, language: str) -> SpeechResult:
+        async def collect_audio() -> bytes:
+            chunks = []
+            async for chunk in edge_tts.Communicate(text, voice).stream():
+                if chunk["type"] == "audio":
+                    data = chunk.get("data")
+                    if isinstance(data, bytes):
+                        chunks.append(data)
+            return b"".join(chunks)
+
+        try:
+            audio = asyncio.run(asyncio.wait_for(collect_audio(), timeout=self._TIMEOUT_SECONDS))
+        except asyncio.TimeoutError:
+            raise TTSError("Voice generation took too long. Please try again.", 504) from None
+        except Exception as exc:
+            logger.warning("Edge TTS request failed: %s", type(exc).__name__)
+            raise TTSError("Unable to generate voice audio right now. Please try again.", 502) from None
+        return SpeechResult(audio=audio, mime_type="audio/mpeg", extension="mp3")
+
+
 _LITTLE_ENDIAN = array("h", [1]).tobytes()[0] == 1
 
 
@@ -128,6 +173,7 @@ def _swapped(samples: array) -> bytes:
 
 PROVIDERS: dict[str, type[TTSProvider]] = {
     MockTTSProvider.name: MockTTSProvider,
+    EdgeTTSProvider.name: EdgeTTSProvider,
 }
 
 
@@ -181,7 +227,7 @@ def generate_speech(text: str, speaker: str, language: str) -> SpeechResult:
 
     provider = ensure_language_supported(language)
 
-    voice = provider.voice_for(speaker)
+    voice = provider.voice_for(speaker, language)
     try:
         result = provider.synthesize(text, voice, language)
     except TTSError:

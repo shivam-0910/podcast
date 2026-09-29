@@ -1,0 +1,17 @@
+/* ===== APPEND to the end of static/css/style.css (Step 13: language selector) ===== */
+.action-right { display: flex; align-items: center; gap: 0.9rem; }
+.language-picker { display: flex; align-items: center; gap: 0.5rem; }
+.language-label { color: var(--muted); font-size: 0.85rem; }
+.language-select {
+  padding: 0.55rem 0.8rem; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); font-size: 0.95rem; cursor: pointer;
+}
+.language-select:hover:not(:disabled) { border-color: var(--accent); }
+.language-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.language-select option:disabled { color: var(--muted); }
+
+@media (max-width: 560px) {
+  .action-right { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  .language-picker { justify-content: space-between; }
+  .language-select { flex: 1; max-width: 60%; }
+}

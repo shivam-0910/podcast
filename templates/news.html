@@ -28,7 +28,17 @@
       <button id="clear-btn" type="button" class="link-btn" hidden>Clear</button>
       <span id="selection-note" class="selection-note" role="status"></span>
     </div>
-    <button id="create-btn" type="button" class="primary-btn" disabled>CREATE AI PODCAST</button>
+    <div class="action-right">
+      <label class="language-picker" for="language-select">
+        <span class="language-label">Language</span>
+        <select id="language-select" class="language-select" data-default="{{ default_language }}">
+          {% for lang in languages %}
+          <option value="{{ lang.code }}"{% if lang.code == default_language %} selected{% endif %}{% if not lang.available %} disabled{% endif %}>{{ lang.name }}{% if not lang.available %} (coming soon){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button id="create-btn" type="button" class="primary-btn" disabled>CREATE AI PODCAST</button>
+    </div>
   </div>
 
   <script src="{{ url_for('static', filename='js/news.js') }}"></script>

@@ -8,7 +8,8 @@
   const GENERIC_ERROR = "Unable to search for news right now. Please try again.";
   const CREATE_ERROR = "Unable to create the podcast right now. Please try again.";
   const MAX_SELECTED = 5;
-  const DEFAULT_LANGUAGE = "en"; // language selector is added in Step 13
+  const FALLBACK_LANGUAGE = "en"; // only used if the selector is missing from the page
+  const LANGUAGE_STORAGE_KEY = "podcast.language";
   const CREATE_TIMEOUT_MS = 90000;
   const CREATE_LABEL = "CREATE AI PODCAST";
   const EPISODE_ID_RE = /^[0-9a-f]{32}$/;
@@ -24,6 +25,7 @@
   const clearBtn = document.getElementById("clear-btn");
   const noteEl = document.getElementById("selection-note");
   const createBtn = document.getElementById("create-btn");
+  const languageEl = document.getElementById("language-select");
 
   const selected = new Map(); // article id -> article (insertion-ordered)
   let creating = false;
@@ -64,6 +66,41 @@
     noteEl.textContent = text || "";
   }
 
+  // ---------- language ----------
+
+  // The chosen language code, or the fallback if the selector is missing or has no usable value.
+  function selectedLanguage() {
+    if (!languageEl) return FALLBACK_LANGUAGE;
+    const option = languageEl.selectedOptions && languageEl.selectedOptions[0];
+    if (!option || option.disabled || !languageEl.value) {
+      return languageEl.dataset.default || FALLBACK_LANGUAGE;
+    }
+    return languageEl.value;
+  }
+
+  function restoreLanguage() {
+    if (!languageEl) return;
+    let saved = null;
+    try {
+      saved = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    } catch (err) {
+      saved = null; // storage blocked: keep the server's default
+    }
+    if (!saved) return;
+    const option = Array.from(languageEl.options).find(function (o) {
+      return o.value === saved && !o.disabled;
+    });
+    if (option) languageEl.value = saved;
+  }
+
+  function rememberLanguage() {
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, selectedLanguage());
+    } catch (err) {
+      /* storage blocked: the choice simply won't persist */
+    }
+  }
+
   // ---------- selection ----------
 
   function updateSelectionUI() {
@@ -71,6 +108,7 @@
     countEl.textContent = count + " selected";
     clearBtn.hidden = count === 0 || creating;
     createBtn.disabled = count === 0 || creating;
+    if (languageEl) languageEl.disabled = creating; // language is locked while an episode is being made
   }
 
   function setCardSelected(card, isSelected) {
@@ -121,6 +159,7 @@
   async function handleCreate() {
     if (creating || selected.size === 0) return;
 
+    const language = selectedLanguage(); // read before the selector is locked
     creating = true;
     createBtn.textContent = "CREATING\u2026";
     updateSelectionUI();
@@ -148,7 +187,7 @@
       response = await fetch("/api/episode/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: topic, language: DEFAULT_LANGUAGE, articles: articles }),
+        body: JSON.stringify({ topic: topic, language: language, articles: articles }),
         signal: controller.signal,
       });
       data = await response.json();
@@ -299,6 +338,7 @@
 
   clearBtn.addEventListener("click", clearSelection);
   createBtn.addEventListener("click", handleCreate);
+  if (languageEl) languageEl.addEventListener("change", rememberLanguage);
 
   // Coming back with the browser Back button can restore this page from cache in its "creating" state.
   window.addEventListener("pageshow", function (event) {
@@ -311,6 +351,7 @@
   if (inputEl) {
     inputEl.value = topic;
   }
+  restoreLanguage();
   updateSelectionUI();
   loadNews();
 })();

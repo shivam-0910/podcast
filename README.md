@@ -95,9 +95,9 @@ Open http://127.0.0.1:5000 in your browser.
 
 ## Text-to-speech
 
-`services/tts_service.py` exposes `generate_speech(text, speaker, language)`. Vendors sit behind a small `TTSProvider` interface, selected by the optional `TTS_PROVIDER` variable in `.env` (default `mock`). The mock provider needs no key and returns a WAV tone (different pitch for Host A and Host B) so playback can be tested before a real voice provider is chosen.
+`services/tts_service.py` exposes `generate_speech(text, speaker, language)`. Providers sit behind a small `TTSProvider` interface, selected by `TTS_PROVIDER` in `.env` (default `edge`). Edge TTS uses Microsoft Edge's online neural voices without an API key and returns MP3 audio for English, Hindi, Bengali, Telugu, and Tamil. Odia isn't available in the current Edge voice catalog. The `mock` provider returns placeholder WAV tones for playback tests.
 
-To add a real provider: subclass `TTSProvider`, register it in `PROVIDERS`, then set `TTS_PROVIDER` and `TTS_API_KEY`.
+To add another provider: subclass `TTSProvider` and register it in `PROVIDERS`.
 
 Audio is stored one file per line, never one big file: `audio/<episode_id>/001_host_a.<ext>`, `002_host_b.<ext>`, and so on. The extension comes from the TTS provider (the mock produces `.wav`). Files are deleted when their episode is evicted from the in-memory store or if episode creation fails. Audio left over from a previous server run is not cleaned up until SQLite persistence is added in Step 14.
 
@@ -113,7 +113,7 @@ Audio is stored one file per line, never one big file: `audio/<episode_id>/001_h
 | 6 | Article selection (up to 5), selected count, enabling CREATE AI PODCAST | Done (the button saves the selection in the browser session; it does not generate a podcast yet) |
 | 7 | Groq conversation generation, `POST /api/episode/create` | Done (tested with mocked Groq responses; needs your `GROQ_API_KEY` for live results) |
 | 8 | Conversation screen with Host A / Host B transcript bubbles | Done (transcript only; playback, highlighting and waveform come in Steps 10-12) |
-| 9 | TTS abstraction (`generate_speech`) with a mock provider | Done (the mock plays a placeholder tone per line, not real speech; no real TTS vendor is connected yet) |
+| 9 | TTS abstraction with mock and Edge providers | Done (Edge TTS is the default and needs no API key) |
 | 10 | One audio file per line saved in `audio/<episode_id>/`, served at `/audio/<episode_id>/<file>` | Done (the browser page does not play it yet; that is Step 11) |
 | 11-12 | Synchronized player and waveform | Not implemented |
 | 13 | Language selection | Not implemented (languages are defined in config only) |
