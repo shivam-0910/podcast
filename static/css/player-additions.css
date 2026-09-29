@@ -1,0 +1,66 @@
+/* ===== APPEND to the end of static/css/style.css (Step 11-12: player + waveform) ===== */
+
+/* Leave room so the fixed player never covers the last bubble */
+.container.conversation { padding-bottom: 14rem; }
+
+.bubble { transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; cursor: pointer; }
+.bubble.active { box-shadow: 0 0 0 2px var(--accent); }
+.bubble.host-b.active { box-shadow: 0 0 0 2px #5fd38d; }
+.transcript:has(.bubble.active) .bubble:not(.active) { opacity: 0.55; }
+
+.player {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  padding: 0.75rem 1.25rem 1rem;
+  background: rgba(15, 17, 21, 0.96); border-top: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+}
+.player[hidden] { display: none; }
+.player > * { max-width: 760px; margin-left: auto; margin-right: auto; }
+
+/* Waveform: CSS-only animation, no audio analysis */
+.waveform {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  height: 48px; margin-bottom: 0.6rem;
+}
+.wave-bar {
+  display: block; width: 4px; height: 12%; border-radius: 3px;
+  background: var(--border); transform-origin: center;
+  transition: height 0.3s ease, background 0.3s ease;
+}
+.waveform.playing .wave-bar,
+.waveform.paused .wave-bar {
+  background: var(--accent); height: var(--peak, 60%);
+  animation: wave-pulse 1s ease-in-out infinite alternate;
+}
+.waveform.paused .wave-bar { animation-play-state: paused; opacity: 0.55; }
+@keyframes wave-pulse {
+  from { transform: scaleY(0.25); }
+  to   { transform: scaleY(1); }
+}
+
+.player-row { display: flex; align-items: center; gap: 0.9rem; }
+.player-row + .player-row { margin-top: 0.5rem; }
+.time-display { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem; white-space: nowrap; min-width: 6.5rem; }
+.progress { flex: 1; accent-color: var(--accent); cursor: pointer; }
+.player-row.controls { justify-content: space-between; }
+.controls-main { display: flex; align-items: center; gap: 0.75rem; margin: 0 auto; }
+.ctrl-btn {
+  width: 2.6rem; height: 2.6rem; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); font-size: 1rem; cursor: pointer;
+}
+.ctrl-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ctrl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ctrl-btn.play { width: 3.2rem; height: 3.2rem; background: var(--accent); border-color: var(--accent); color: #fff; font-size: 1.1rem; }
+.ctrl-btn.play:hover { filter: brightness(1.1); color: #fff; }
+.volume-wrap { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); }
+.volume { width: 90px; accent-color: var(--accent); cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  .waveform.playing .wave-bar { animation: none; }
+}
+@media (max-width: 560px) {
+  .time-display { min-width: 0; font-size: 0.8rem; }
+  .player-row:first-of-type { flex-wrap: wrap; }
+  .controls-main { margin: 0; }
+  .volume { width: 70px; }
+}

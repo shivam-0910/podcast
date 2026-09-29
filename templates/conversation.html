@@ -16,9 +16,27 @@
     <h1 id="episode-title" class="episode-heading">Loading episode&hellip;</h1>
     <p id="episode-meta" class="episode-meta"></p>
     <div id="status" class="status" role="status"></div>
-    <div id="transcript" class="transcript" aria-live="polite"></div>
-    <p id="episode-note" class="episode-note" hidden>Transcript only for now. Voices, playback and the waveform are added in later steps.</p>
+    <div id="transcript" class="transcript" aria-live="off"></div>
   </main>
+
+  <section id="player" class="player" aria-label="Podcast player" hidden>
+    <div id="waveform" class="waveform" aria-hidden="true"></div>
+    <div class="player-row">
+      <span id="time-display" class="time-display">00:00 / 00:00</span>
+      <input id="progress" class="progress" type="range" min="0" max="1000" value="0" step="1" aria-label="Progress">
+    </div>
+    <div class="player-row controls">
+      <div class="controls-main">
+        <button id="prev-btn" type="button" class="ctrl-btn" aria-label="Previous">&#9198;</button>
+        <button id="play-btn" type="button" class="ctrl-btn play" aria-label="Play">&#9654;</button>
+        <button id="next-btn" type="button" class="ctrl-btn" aria-label="Next">&#9197;</button>
+      </div>
+      <label class="volume-wrap">
+        <span aria-hidden="true">&#128266;</span>
+        <input id="volume" class="volume" type="range" min="0" max="100" value="80" aria-label="Volume">
+      </label>
+    </div>
+  </section>
 
   <script id="languages-data" type="application/json">{{ languages|tojson }}</script>
   <script src="{{ url_for('static', filename='js/player.js') }}"></script>
