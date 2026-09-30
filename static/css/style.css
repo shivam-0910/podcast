@@ -531,3 +531,66 @@ body.news-layout .container.wide.newspaper-main { padding-top: 1rem; }
 .selected-item-remove:hover:not(:disabled) { color: var(--news-accent); border-color: var(--news-accent); }
 .selected-item-remove:disabled { opacity: 0.4; cursor: not-allowed; }
 @media (max-width: 800px) { .selected-list { display: none; } }
+
+/* ===== REPLACE the previous "warm ivory paper theme" block at the end of static/css/style.css with this =====
+   Yellowed newsprint. Tune with the values in the first block:
+   - more yellow/aged: make --paper and --desk more saturated (e.g. #f1e8bf / #d6cb9c)
+   - cleaner/lighter:  make --paper paler (e.g. #f6f1dc)
+   - more visible texture: raise the last number in --grain (.08 -> .13) */
+
+:root, body.news-layout {
+  --paper:  #f3ecd0;   /* the newspaper page: yellowed cream */
+  --desk:   #ddd3ab;   /* background behind the paper: olive-tan */
+  --panel:  #ebe3c0;   /* bars, panels */
+  --ink:    #2a261a;   /* text: olive-black */
+  --rule:   #b9aa77;   /* borders and rules: olive */
+  --accent-warm: #8b3a22;  /* links, buttons, highlights: deep rust */
+  --muted-warm:  #6f6845;
+
+  --bg: var(--desk);  --card: var(--paper);  --card-hover: #f7f1da;
+  --border: var(--rule);  --text: var(--ink);  --muted: var(--muted-warm);  --accent: var(--accent-warm);
+  --news-paper: var(--paper);  --news-ink: var(--ink);  --news-muted: var(--muted-warm);
+  --news-rule: var(--rule);    --news-accent: var(--accent-warm);
+
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .32  0 0 0 0 .29  0 0 0 0 .12  0 0 0 .08 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* the desk. min-height + no-repeat stops the gradient tiling into a visible seam on short pages */
+html { background-color: var(--desk); min-height: 100%; }
+body, body.news-layout {
+  min-height: 100vh;
+  background-color: var(--desk);
+  background-image: radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255, 250, 215, 0.55), transparent 70%), var(--grain);
+  background-repeat: no-repeat, repeat;
+  background-attachment: fixed, scroll;
+  color: var(--ink);
+}
+
+/* the paper */
+body .newspaper-page, body .newspaper-page:first-child {
+  background-color: var(--paper);
+  background-image: var(--grain);
+  border-color: var(--rule);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 8px 22px rgba(80, 70, 25, 0.20), 0 1px 3px rgba(80, 70, 25, 0.25);
+}
+body .newspaper-page.selected { box-shadow: 0 0 0 2px var(--accent-warm), 0 8px 22px rgba(80, 70, 25, 0.20); }
+
+/* bars and panels */
+body.news-layout > .topbar, body.conversation-layout .topbar, .topbar { background-color: var(--panel); border-color: var(--rule); }
+body.news-layout > .action-bar { background-color: var(--panel); background-image: var(--grain); border-color: var(--rule); }
+.player { background-color: var(--panel); background-image: var(--grain); border-top-color: var(--rule); box-shadow: 0 -6px 18px rgba(80, 70, 25, 0.12); }
+.voice-settings { background-color: var(--panel); background-image: var(--grain); border-color: var(--rule); }
+
+/* transcript bubbles */
+.bubble.host-a { background-color: #f0e7c4; border-color: #c9b982; }
+.bubble.host-b { background-color: #e5e6c3; border-color: #b4b98a; }
+
+/* inputs and buttons */
+body .search-form input, body.news-layout .search-form.compact input, .voice-select, .language-select {
+  background-color: #f8f2dc; border-color: var(--rule); color: var(--ink);
+}
+.ctrl-btn { background-color: #f0e8c8; border-color: var(--rule); }
+.ctrl-btn.play, .primary-btn { background-color: var(--accent-warm); border-color: var(--accent-warm); color: #fffaf0; }
+.primary-btn:disabled { background-color: #d3c99f; border-color: #d3c99f; color: #8a8058; }
+body.news-layout .page-nav-button { background-color: #f8f2dc; border-color: var(--rule); }
+.selected-item, .newspaper-navigation, .paper-page-footer { border-color: var(--rule); }
