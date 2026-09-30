@@ -11,7 +11,7 @@
   const SINGLE_PAGE_VIEW = true; // one article per screen; set false to restore the two-page desktop spread
   const FALLBACK_LANGUAGE = "en"; // only used if the selector is missing from the page
   const LANGUAGE_STORAGE_KEY = "podcast.language";
-  const CREATE_TIMEOUT_MS = 90000;
+  const CREATE_TIMEOUT_MS = 300000;
   const CREATE_LABEL = "CREATE AI PODCAST";
   const EPISODE_ID_RE = /^[0-9a-f]{32}$/;
 
@@ -73,6 +73,66 @@
     noteEl.textContent = text || "";
   }
 
+  // ---------- selected stories preview (sidebar) ----------
+
+  function selectedListElement() {
+    let list = document.getElementById("selected-list");
+    if (!list) {
+      list = document.createElement("ol");
+      list.id = "selected-list";
+      list.className = "selected-list";
+      noteEl.parentNode.appendChild(list);
+    }
+    return list;
+  }
+
+  function jumpToArticle(articleId) {
+    const index = articleResults.findIndex(function (a) { return a.id === articleId; });
+    if (index < 0) return;
+    currentIndex = index;
+    renderSpread("");
+  }
+
+  function removeSelected(articleId) {
+    if (creating) return;
+    selected.delete(articleId);
+    const page = findPage(articleId);
+    if (page) {
+      setPageSelected(page, false);
+      const checkbox = page.querySelector(".paper-check");
+      if (checkbox) checkbox.checked = false;
+    }
+    setNote("");
+    updateSelectionUI();
+  }
+
+  function renderSelectedList() {
+    const list = selectedListElement();
+    list.textContent = "";
+    selected.forEach(function (article, id) {
+      const item = document.createElement("li");
+      item.className = "selected-item";
+
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "selected-item-open";
+      open.appendChild(textElement("span", "selected-item-title", article.title || "Untitled story"));
+      if (article.source) open.appendChild(textElement("span", "selected-item-source", article.source));
+      open.addEventListener("click", function () { jumpToArticle(id); });
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "selected-item-remove";
+      remove.textContent = "\u00d7";
+      remove.disabled = creating;
+      remove.setAttribute("aria-label", "Remove: " + (article.title || "story"));
+      remove.addEventListener("click", function () { removeSelected(id); });
+
+      item.append(open, remove);
+      list.appendChild(item);
+    });
+  }
+
   // ---------- language ----------
 
   // The chosen language code, or the fallback if the selector is missing or has no usable value.
@@ -116,6 +176,7 @@
     clearBtn.hidden = count === 0 || creating;
     createBtn.disabled = count === 0 || creating;
     if (languageEl) languageEl.disabled = creating; // language is locked while an episode is being made
+    renderSelectedList();
   }
 
   function setPageSelected(page, isSelected) {
@@ -170,7 +231,7 @@
     creating = true;
     createBtn.textContent = "CREATING\u2026";
     updateSelectionUI();
-    setNote("Writing your episode. This can take up to a minute.");
+    setNote("Writing your episode. This can take a couple of minutes.");
 
     const articles = Array.from(selected.values()).map(function (a) {
       return {

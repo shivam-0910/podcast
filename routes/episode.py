@@ -16,6 +16,7 @@ import logging
 from flask import Blueprint, Response, jsonify, render_template, request
 
 from config.config import Config
+from services.article_service import add_article_text
 from services.conversation_service import ConversationError
 from services.episode_service import create_episode, get_episode, update_episode_voices
 from services.news_service import clean_articles
@@ -87,6 +88,8 @@ def create():
     articles = clean_articles(picked)
     if not articles:
         return _error("The selected articles are not valid. Please search again.", 400)
+
+    articles = add_article_text(articles)  # adds a longer "text" excerpt where the page can be read
 
     try:
         episode = create_episode(articles, language, topic, voices)

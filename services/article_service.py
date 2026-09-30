@@ -22,6 +22,7 @@ import re
 import socket
 import threading
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -89,6 +90,30 @@ def get_details(article_id: str) -> dict[str, Any]:
         while len(_cache) > MAX_CACHED:
             _cache.popitem(last=False)
     return details
+
+
+def add_article_text(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return copies of `articles`, each with a "text" excerpt when the publisher's page could be read.
+
+    Used to give the podcast writer more than the short SERP snippet. Never raises: an article whose
+    page can't be fetched (unknown id, paywall, timeout) is returned unchanged and falls back to its snippet.
+    """
+    def load(article: dict[str, Any]) -> dict[str, Any]:
+        item = dict(article)
+        try:
+            text = " ".join(get_details(article["id"]).get("paragraphs", []))
+            if text:
+                item["text"] = text
+        except ArticleError:
+            pass
+        except Exception:
+            logger.warning("Unexpected error reading article text", exc_info=True)
+        return item
+
+    if not articles:
+        return []
+    with ThreadPoolExecutor(max_workers=min(5, len(articles))) as pool:
+        return list(pool.map(load, articles))
 
 
 # ---------------------------------------------------------------------------

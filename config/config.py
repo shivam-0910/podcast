@@ -42,7 +42,7 @@ class Config:
     # "offline" uses installed Windows SAPI voices; "edge" uses Microsoft's online voices.
     _DEFAULT_TTS_PROVIDER: str = "offline" if os.name == "nt" else "edge"
     TTS_PROVIDER: str = os.getenv("TTS_PROVIDER", _DEFAULT_TTS_PROVIDER).strip().lower() or _DEFAULT_TTS_PROVIDER
-    TTS_MAX_WORKERS: int = 1  # serialize TTS requests for Windows SAPI and Edge stability
+    TTS_MAX_WORKERS: int = 4  # allow parallel speech generation while keeping provider stability reasonable
     EDGE_TTS_PROXY: str = os.getenv("EDGE_TTS_PROXY", "").strip()
 
     # App settings

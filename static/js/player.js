@@ -199,6 +199,26 @@
     updateApplyVoicesButton();
   }
 
+  // Short display name of the voice an episode's audio actually uses,
+  // e.g. the option label "Madhur (Male)" -> "Madhur". Empty when unknown.
+  function voiceDisplayName(speaker) {
+    const config = voiceOptionsByLanguage[currentLanguage];
+    const voiceId = appliedVoices && appliedVoices[speaker];
+    if (!config || !Array.isArray(config.options) || !voiceId) return "";
+    const voice = config.options.find(function (v) { return v.id === voiceId; });
+    if (!voice || typeof voice.label !== "string") return "";
+    return voice.label.replace(/\s*\(.*\)\s*$/, "").trim();
+  }
+
+  function speakerLabel(speaker) {
+    const fallback = speaker === "host_a" ? "HOST A" : "HOST B";
+    const name = voiceDisplayName(speaker);
+    if (!name) return fallback;
+    const other = voiceDisplayName(speaker === "host_a" ? "host_b" : "host_a");
+    // Both hosts on the same voice: keep the role so the two can still be told apart.
+    return (name === other ? name + " \u00b7 " + fallback : name).toUpperCase();
+  }
+
   function previewVoice(speaker) {
     const voiceId = speaker === "host_a" ? hostAVoiceEl.value : hostBVoiceEl.value;
     if (!voiceId || applyingVoices) return;
@@ -581,7 +601,7 @@
 
       const label = document.createElement("div");
       label.className = "bubble-speaker";
-      label.textContent = isHostA ? "HOST A" : "HOST B";
+      label.textContent = speakerLabel(segment.speaker);
       bubble.appendChild(label);
 
       const text = document.createElement("p");
