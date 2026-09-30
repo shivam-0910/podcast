@@ -95,7 +95,7 @@ Open http://127.0.0.1:5000 in your browser.
 
 ## Text-to-speech
 
-`services/tts_service.py` exposes `generate_speech(text, speaker, language)`. Providers sit behind a small `TTSProvider` interface, selected by `TTS_PROVIDER` in `.env` (default `edge`). Edge TTS uses Microsoft Edge's online neural voices without an API key and returns MP3 audio for English, Hindi, Bengali, Telugu, and Tamil. Odia isn't available in the current Edge voice catalog. The `mock` provider returns placeholder WAV tones for playback tests.
+`services/tts_service.py` exposes `generate_speech(text, speaker, language)`. Providers sit behind a small `TTSProvider` interface. On Windows, the default `offline` provider uses `pyttsx3` and installed SAPI voices without a network connection; only languages with local voices are available (English on this installation). Set `TTS_PROVIDER=edge` in `.env` to use Microsoft Edge's online neural voices for English, Hindi, Bengali, Telugu, and Tamil. Odia isn't available in the current Edge voice catalog. The `mock` provider returns placeholder WAV tones for playback tests.
 
 To add another provider: subclass `TTSProvider` and register it in `PROVIDERS`.
 

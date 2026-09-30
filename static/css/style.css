@@ -501,3 +501,21 @@ body.news-layout .container.wide.newspaper-main { padding-top: 1rem; }
   .paper-body { grid-template-columns: minmax(0, 1fr); }
   .paper-story { max-height: none; }
 }
+
+/* Longer article text: paragraphs scroll inside the story area */
+.paper-story p { margin: 0 0 0.8rem; }
+.paper-story p:last-child { margin-bottom: 0; }
+.paper-story { max-height: calc(100vh - 470px); min-height: 8rem; padding-right: 0.4rem; }
+
+/* ===== APPEND to the end of static/css/style.css: voice picker on the conversation page ===== */
+.voice-settings { margin: 0 0 1.2rem; padding: 0.9rem 1.1rem; border: 1px solid #b8ad93; border-radius: 2px; background: #efe6cc; }
+.voice-settings[hidden] { display: none; }
+.voice-row { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.6rem; }
+.voice-label { flex: 0 0 6.5rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--news-muted); }
+.voice-select { flex: 1; min-width: 0; padding: 0.45rem 0.6rem; border: 1px solid var(--news-rule); border-radius: 2px; background: var(--news-paper); color: var(--news-ink); font-size: 0.9rem; }
+.voice-actions { display: flex; align-items: center; gap: 0.9rem; margin-top: 0.3rem; }
+.voice-status { font-size: 0.85rem; color: var(--news-muted); }
+@media (max-width: 560px) {
+  .voice-row { flex-wrap: wrap; }
+  .voice-label { flex-basis: 100%; }
+}

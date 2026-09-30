@@ -28,6 +28,8 @@
   const createBtn = document.getElementById("create-btn");
   const languageEl = document.getElementById("language-select");
   const selected = new Map(); // article id -> article (insertion-ordered)
+  const detailsCache = new Map(); // article id -> {image_url, paragraphs} or null when unavailable
+  const detailsPending = new Set();
   let creating = false;
   let articleResults = [];
   let currentIndex = 0;
@@ -224,6 +226,91 @@
     window.location.href = "/conversation?id=" + encodeURIComponent(data.episode_id);
   }
 
+  // ---------- article details (full-size image + longer text) ----------
+
+  function validDetails(data) {
+    return data && typeof data === "object" && Array.isArray(data.paragraphs) &&
+      data.paragraphs.every(function (p) { return typeof p === "string"; });
+  }
+
+  async function loadDetails(articleId) {
+    if (detailsCache.has(articleId)) {
+      applyDetails(articleId);
+      return;
+    }
+    if (detailsPending.has(articleId)) return;
+    detailsPending.add(articleId);
+    let details = null;
+    try {
+      const response = await fetch("/api/article/" + encodeURIComponent(articleId));
+      if (response.ok) details = await response.json();
+    } catch (err) {
+      details = null; // keep the snippet and thumbnail
+    }
+    detailsPending.delete(articleId);
+    detailsCache.set(articleId, validDetails(details) ? details : null);
+    applyDetails(articleId);
+  }
+
+  function findPage(articleId) {
+    const pages = resultsEl.querySelectorAll(".newspaper-page[data-article-id]");
+    return Array.from(pages).find(function (p) { return p.dataset.articleId === articleId; }) || null;
+  }
+
+  function applyDetails(articleId) {
+    const details = detailsCache.get(articleId);
+    const page = findPage(articleId);
+    if (!details || !page || page.dataset.detailed) return;
+    const body = page.querySelector(".paper-body");
+    const text = page.querySelector(".paper-text");
+    if (!body || !text) return;
+    page.dataset.detailed = "1";
+
+    if (details.paragraphs.length > 0) {
+      const story = document.createElement("div");
+      story.className = "paper-story";
+      details.paragraphs.forEach(function (paragraph) {
+        const p = document.createElement("p");
+        p.textContent = paragraph;
+        story.appendChild(p);
+      });
+      const oldStory = text.querySelector(".paper-story");
+      if (oldStory) oldStory.replaceWith(story);
+      else text.insertBefore(story, text.firstChild);
+    }
+
+    // Swap in the sharp image only once it has loaded; otherwise keep the thumbnail.
+    if (isHttpUrl(details.image_url)) {
+      const loader = new Image();
+      loader.referrerPolicy = "no-referrer";
+      loader.addEventListener("load", function () {
+        if (!page.isConnected) return;
+        let image = body.querySelector(".paper-figure img");
+        if (!image) {
+          const figure = document.createElement("figure");
+          figure.className = "paper-figure";
+          image = document.createElement("img");
+          image.alt = "";
+          image.decoding = "async";
+          image.referrerPolicy = "no-referrer";
+          figure.appendChild(image);
+          body.insertBefore(figure, body.firstChild);
+          body.classList.remove("no-image");
+        }
+        image.src = details.image_url;
+      });
+      loader.src = details.image_url;
+    }
+  }
+
+  // Load details for the visible page(s) and prefetch the next one.
+  function loadVisibleDetails() {
+    const visible = isMobileSpread() ? 2 : 3;
+    articleResults.slice(currentIndex, currentIndex + visible).forEach(function (article) {
+      loadDetails(article.id);
+    });
+  }
+
   // ---------- rendering ----------
 
   function textElement(tagName, className, text) {
@@ -367,6 +454,7 @@
     navigation.appendChild(next);
     edition.appendChild(navigation);
     resultsEl.appendChild(edition);
+    loadVisibleDetails();
   }
 
   function navigateSpread(direction) {

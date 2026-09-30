@@ -16,6 +16,24 @@
     <h1 id="episode-title" class="episode-heading">Loading episode&hellip;</h1>
     <p id="episode-meta" class="episode-meta"></p>
     <div id="status" class="status" role="status"></div>
+
+    <section id="voice-settings" class="voice-settings" aria-label="Voice settings" hidden>
+      <div class="voice-row">
+        <label class="voice-label" for="host-a-voice">Host A voice</label>
+        <select id="host-a-voice" class="voice-select"></select>
+        <button id="host-a-sample" type="button" class="secondary-btn">Preview</button>
+      </div>
+      <div class="voice-row">
+        <label class="voice-label" for="host-b-voice">Host B voice</label>
+        <select id="host-b-voice" class="voice-select"></select>
+        <button id="host-b-sample" type="button" class="secondary-btn">Preview</button>
+      </div>
+      <div class="voice-actions">
+        <button id="apply-voices-btn" type="button" class="primary-btn" disabled>Apply to episode</button>
+        <span id="voice-status" class="voice-status" role="status"></span>
+      </div>
+    </section>
+
     <div id="transcript" class="transcript" aria-live="off"></div>
   </main>
 
@@ -39,6 +57,7 @@
   </section>
 
   <script id="languages-data" type="application/json">{{ languages|tojson }}</script>
+  <script id="voice-options-data" type="application/json">{{ voice_options|tojson }}</script>
   <script src="{{ url_for('static', filename='js/player.js') }}"></script>
 </body>
 </html>

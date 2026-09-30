@@ -39,9 +39,10 @@ class Config:
     MAX_ARTICLES_PER_EPISODE: int = 5
 
     # Text-to-speech. TTS_PROVIDER selects a provider registered in services/tts_service.py.
-    # "edge" uses Microsoft's online neural voices without an API key; "mock" is for playback tests.
-    TTS_PROVIDER: str = os.getenv("TTS_PROVIDER", "edge").strip().lower() or "edge"
-    TTS_MAX_WORKERS: int = 4  # audio segments generated in parallel
+    # "offline" uses installed Windows SAPI voices; "edge" uses Microsoft's online voices.
+    _DEFAULT_TTS_PROVIDER: str = "offline" if os.name == "nt" else "edge"
+    TTS_PROVIDER: str = os.getenv("TTS_PROVIDER", _DEFAULT_TTS_PROVIDER).strip().lower() or _DEFAULT_TTS_PROVIDER
+    TTS_MAX_WORKERS: int = 1  # serialize TTS requests for Windows SAPI and Edge stability
     EDGE_TTS_PROXY: str = os.getenv("EDGE_TTS_PROXY", "").strip()
 
     # App settings

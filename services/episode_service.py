@@ -17,11 +17,14 @@ This is temporary: Step 14 replaces it with SQLite persistence (episodes survive
 When an episode is evicted from the store its audio folder is deleted, so disk use stays bounded.
 """
 import copy
+import json
 import logging
 import os
 import re
 import shutil
+import sqlite3
 import threading
+import time
 import uuid
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -41,6 +44,83 @@ _RETRYABLE_TTS_STATUS = (502, 504)
 
 _store: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
 _store_lock = threading.Lock()
+
+
+def init_storage() -> None:
+    """Create the SQLite backing store and restore any previously saved episodes into memory."""
+    db_path = Path(Config.DATABASE_PATH)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS episodes (
+                episode_id TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.commit()
+    _load_persisted_episodes()
+
+
+def _db_path() -> Path:
+    return Path(Config.DATABASE_PATH)
+
+
+def _load_persisted_episodes() -> None:
+    db_path = _db_path()
+    if not db_path.exists():
+        return
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT episode_id, payload FROM episodes ORDER BY created_at DESC"
+        ).fetchall()
+
+    for episode_id, payload in rows:
+        try:
+            episode = json.loads(payload)
+        except (TypeError, ValueError):
+            logger.warning("Ignoring malformed persisted episode: %s", episode_id)
+            continue
+        if not isinstance(episode, dict):
+            continue
+        episode_id = str(episode.get("episode_id") or episode_id)
+        if not _EPISODE_ID_RE.match(episode_id):
+            continue
+        with _store_lock:
+            _store[episode_id] = copy.deepcopy(episode)
+
+
+def _persist_episode(episode: dict[str, Any]) -> None:
+    if not isinstance(episode, dict) or not episode.get("episode_id"):
+        return
+
+    try:
+        with sqlite3.connect(_db_path()) as conn:
+            conn.execute(
+                """
+                INSERT INTO episodes (episode_id, payload)
+                VALUES (?, ?)
+                ON CONFLICT(episode_id) DO UPDATE SET payload = excluded.payload
+                """,
+                (episode["episode_id"], json.dumps(episode, ensure_ascii=False, separators=(",", ":"))),
+            )
+            conn.commit()
+    except sqlite3.Error:
+        logger.exception("Could not persist episode %s", episode.get("episode_id"))
+
+
+def _delete_persisted_episode(episode_id: str) -> None:
+    if not isinstance(episode_id, str) or not _EPISODE_ID_RE.match(episode_id):
+        return
+    try:
+        with sqlite3.connect(_db_path()) as conn:
+            conn.execute("DELETE FROM episodes WHERE episode_id = ?", (episode_id,))
+            conn.commit()
+    except sqlite3.Error:
+        logger.exception("Could not delete persisted episode %s", episode_id)
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +168,40 @@ def get_episode(episode_id: str) -> dict[str, Any] | None:
         return None
     with _store_lock:
         episode = _store.get(episode_id)
-        return copy.deepcopy(episode) if episode else None
+        if episode is not None:
+            return copy.deepcopy(episode)
+
+    persisted = _fetch_persisted_episode(episode_id)
+    if persisted is not None:
+        _remember(persisted)
+        return copy.deepcopy(persisted)
+    return None
+
+
+def _fetch_persisted_episode(episode_id: str) -> dict[str, Any] | None:
+    db_path = _db_path()
+    if not db_path.exists():
+        return None
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT payload FROM episodes WHERE episode_id = ?",
+                (episode_id,),
+            ).fetchone()
+    except sqlite3.Error:
+        logger.exception("Could not load persisted episode %s", episode_id)
+        return None
+
+    if row is None:
+        return None
+    try:
+        episode = json.loads(row[0])
+    except (TypeError, ValueError):
+        logger.warning("Persisted episode %s was malformed and was ignored.", episode_id)
+        return None
+    if isinstance(episode, dict):
+        return episode
+    return None
 
 
 def update_episode_voices(episode_id: str, voices: dict[str, str]) -> dict[str, Any] | None:
@@ -221,7 +334,8 @@ def _speech_with_retry(text: str, speaker: str, language: str, voice_id: str | N
     except TTSError as exc:
         if exc.status_code not in _RETRYABLE_TTS_STATUS:
             raise
-        logger.info("Retrying TTS after a transient failure")
+        logger.info("Retrying TTS after a transient failure in 1 second")
+        time.sleep(1)
         return generate()
 
 
@@ -249,5 +363,10 @@ def _remember(episode: dict[str, Any]) -> None:
         while len(_store) > MAX_STORED_EPISODES:
             old_id, _ = _store.popitem(last=False)  # drop the oldest
             evicted.append(old_id)
+    _persist_episode(episode)
     for old_id in evicted:
         _delete_audio(old_id)
+        _delete_persisted_episode(old_id)
+
+
+init_storage()

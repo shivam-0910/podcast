@@ -3,3 +3,4 @@ python-dotenv
 requests
 groq
 edge-tts
+pyttsx3

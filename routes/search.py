@@ -3,6 +3,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from services.article_service import remember_articles
 from services.news_service import clean_articles
 from services.serp_service import SerpError, search_news
 
@@ -28,6 +29,7 @@ def search():
     try:
         raw_items = search_news(query)
         articles = clean_articles(raw_items)
+        remember_articles(articles)
     except SerpError as exc:
         return _error(exc.message, exc.status_code)
     except Exception:

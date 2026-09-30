@@ -22,10 +22,12 @@ import asyncio
 import io
 import logging
 import math
+import tempfile
 import wave
 from abc import ABC, abstractmethod
 from array import array
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 import edge_tts
 
@@ -201,6 +203,74 @@ class EdgeTTSProvider(TTSProvider):
         return SpeechResult(audio=audio, mime_type="audio/mpeg", extension="mp3")
 
 
+class OfflineTTSProvider(TTSProvider):
+    """Generates WAV speech using locally installed Windows SAPI voices."""
+
+    name = "offline"
+    supported_languages = frozenset({"en"})
+
+    def voice_options(self, language: str) -> list[dict[str, str]]:
+        if language not in self.supported_languages:
+            return []
+        return [{"id": voice.id, "label": voice.name} for voice in self._installed_voices()]
+
+    def voice_for(self, speaker: str, language: str | None = None, voice_id: str | None = None) -> str:
+        if speaker not in SPEAKERS:
+            raise TTSError("Unknown speaker.", 400)
+        if language is not None and language not in self.supported_languages:
+            raise TTSError("Offline speech is currently available in English only.", 400)
+
+        voices = self._installed_voices()
+        if not voices:
+            raise TTSError("No Windows speech voices are installed.", 503)
+        if voice_id is not None:
+            selected = next((voice for voice in voices if voice.id == voice_id), None)
+            if selected is None:
+                raise TTSError("That offline voice is not installed on this computer.", 400)
+            return selected.id
+
+        preferred_name = "david" if speaker == "host_a" else "zira"
+        preferred = next((voice for voice in voices if preferred_name in voice.name.lower()), None)
+        fallback_index = 0 if speaker == "host_a" else min(1, len(voices) - 1)
+        return (preferred or voices[fallback_index]).id
+
+    def synthesize(self, text: str, voice: str, language: str) -> SpeechResult:
+        import pyttsx3
+
+        engine = None
+        try:
+            engine = pyttsx3.init("sapi5")
+            engine.setProperty("voice", voice)
+            with tempfile.TemporaryDirectory() as folder:
+                output = Path(folder) / "speech.wav"
+                engine.save_to_file(text, str(output))
+                engine.runAndWait()
+                audio = output.read_bytes()
+        except Exception as exc:
+            logger.warning("Offline TTS request failed: %s", type(exc).__name__)
+            raise TTSError(
+                "Unable to generate offline voice audio. Check installed Windows speech voices.", 502
+            ) from None
+        finally:
+            if engine is not None:
+                engine.stop()
+
+        return SpeechResult(audio=audio, mime_type="audio/wav", extension="wav")
+
+    @staticmethod
+    def _installed_voices() -> list[Any]:
+        import pyttsx3
+
+        try:
+            engine = pyttsx3.init("sapi5")
+            voices = engine.getProperty("voices")
+            engine.stop()
+        except Exception as exc:
+            logger.warning("Could not enumerate Windows speech voices: %s", type(exc).__name__)
+            raise TTSError("Windows offline speech is not available on this computer.", 503) from None
+        return voices
+
+
 _LITTLE_ENDIAN = array("h", [1]).tobytes()[0] == 1
 
 
@@ -215,6 +285,7 @@ def _swapped(samples: array) -> bytes:
 # ---------------------------------------------------------------------------
 
 PROVIDERS: dict[str, type[TTSProvider]] = {
+    OfflineTTSProvider.name: OfflineTTSProvider,
     MockTTSProvider.name: MockTTSProvider,
     EdgeTTSProvider.name: EdgeTTSProvider,
 }
